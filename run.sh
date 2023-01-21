@@ -19,29 +19,35 @@ check_defaults
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
-    for service in ${@}; do
+    for raw_service in ${@}; do
+      service="$(trim_string "$raw_service")"
+      ! regex "$service" '^(#?([a-zA-Z0-9_]+))$' && {
+        text error "Invalid service name: ${service}"
+        exit 1
+      }
       declare -A $service
     done
   } || {
     # Now source services and process
     . services.array
-    for service in ${@}; do
+    for raw_service in ${@}; do
+      service="$(trim_string "$raw_service")"
       declare -n "s=$service"
-      [ ${#s[@]} -eq 0 ] && { text error  "Service **${service}** is not defined" ; continue ; }
-      [ ${#s[command]} -eq 0 ] && { text error "Service **${service}** has no command defined" ; continue ; }
-      text info "Starting: $(text debug ${service} color_only)"
+      [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
+      [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
+      text info "Starting: $(text debug $service color_only)"
       > ${service}.env
       for config in ${CONFIG_PARAMS[@]}; do
         user_config=0
         for attr in ${!s[@]}; do
           [[ "$attr" == "$config" ]] && {
             user_config=1
-            echo ${attr}=$(printf '"%s"' "${s[$attr]}") >> ${service}.env
+            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> ${service}.env
           }
         done
-        [ $user_config -eq 0 ] && echo ${config}=$(printf '"%s"' "${!config}") >> ${service}.env
+        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> ${service}.env
       done
-      echo "service_name=${service}" >> ${service}.env
+      printf 'service_name="%s"\n' "$service" >> ${service}.env
       env_file=${service}.env bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
@@ -50,8 +56,16 @@ for i in {1..2}; do
 done
 
 while true; do
+  declare -i pid
   for key in ${!BACKGROUND_PIDS[@]}; do
-    text info "Spawned service $(text debug ${key} color_only) with PID ${BACKGROUND_PIDS[$key]}, waiting for child procs"
+    pid=${BACKGROUND_PIDS[$key]}
+    #
+    until regex "$(</proc/$pid/status)" 'State:\sT\s'; do
+      sleep 0.1
+    done
+    text info "Spawned service container $(text debug $key color_only) with PID $pid, starting command..."
+    kill -CONT $pid
+    text info "Service $(text debug $key color_only) started"
   done
   sleep inf
 done

@@ -2,6 +2,8 @@
 . _/shared.sh
 exec &> /dev/stdout 2>&1
 trap "stop=1" USR1
+# Waiting for launch command
+kill -STOP $$
 i=0
 while true && [ ! -v stop ]; do
   eval $command
