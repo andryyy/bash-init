@@ -17,9 +17,8 @@ trim_string() {
   printf '%s' "$_"
 }
 
-# \o/ pure bash bible
-regex() {
-  [[ $1 =~ $2 ]] && printf '%s' "${BASH_REMATCH[1]}"
+regex_match() {
+  [[ $1 =~ $2 ]]
 }
 
 finish() {

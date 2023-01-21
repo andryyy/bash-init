@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-declare -a CONFIG_PARAMS=(restart periodic_interval success_exit restart_retries restart_max_delay probe depends stop_signal dependency_failure_action reload_signal command)
+declare -ar CONFIG_PARAMS=(restart periodic_interval success_exit restart_retries restart_max_delay probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
+
 . _/defaults.config
 . _/system.sh
 . _/shared.sh
@@ -21,7 +22,7 @@ for i in {1..2}; do
   [ $i -eq 1 ] && {
     for raw_service in ${@}; do
       service="$(trim_string "$raw_service")"
-      ! regex "$service" '^(#?([a-zA-Z0-9_]+))$' && {
+      ! regex_match "$service" '^(#?([a-zA-Z0-9_]+))$' && {
         text error "Invalid service name: ${service}"
         exit 1
       }
@@ -60,7 +61,7 @@ while true; do
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
     #
-    until regex "$(</proc/$pid/status)" 'State:\sT\s'; do
+    until regex_match "$(</proc/$pid/status)" 'State:\sT\s'; do
       sleep 0.1
     done
     text info "Spawned service container $(text debug $key color_only) with PID $pid, starting command..."
