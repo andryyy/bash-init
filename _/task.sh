@@ -29,5 +29,6 @@ while true && [ ! -v stop ]; do
 done
 
 while kill %1 2>/dev/null; do
-  sleep 0.1
+  # \o/ pure bash bible
+  read -rt 0.1 <> <(:) || :
 done

@@ -17,6 +17,8 @@ check_defaults
   exit 1
 }
 
+exec {sleep_fd}<> <(:)
+
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
@@ -60,13 +62,10 @@ while true; do
   declare -i pid
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    #
-    until regex_match "$(</proc/$pid/status)" 'State:\sT\s'; do
-      sleep 0.1
-    done
+    await_stop $pid
     text info "Spawned service container $(text debug $key color_only) with PID $pid, starting command..."
     kill -CONT $pid
     text info "Service $(text debug $key color_only) started"
   done
-  sleep inf
+  read -u $sleep_fd||:
 done
