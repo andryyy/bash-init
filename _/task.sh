@@ -7,7 +7,6 @@ kill -STOP $$
 
 declare -i i=0
 [ ! -z "$probe" ] && {
-  declare -a params
   readarray -t params < <(split "$probe" ":")
   while ! run_with_timeout http_probe ${params[@]:1} && [ ! -v stop ]; do
     ((i++))
