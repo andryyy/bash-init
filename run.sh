@@ -19,6 +19,8 @@ check_defaults
 
 exec {sleep_fd}<> <(:)
 
+text debug "Spawned bash-init with PID $$"
+
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
