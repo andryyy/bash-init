@@ -28,12 +28,15 @@ while true && [ ! -v stop ]; do
   eval $command
   ec=$?
   [ ! -v stop ] && {
-    [[ "$restart" =~ (always|periodic) ]] && {
-      text info "Service $(text debug $service_name color_only) did return exit code $ec"
-    } || [[ "$restart" == "never" ]] && {
+    [[ "$restart" =~ always|periodic ]] && {
+      text info "Service $(text debug $service_name color_only) did return exit code $ec, restarting due to policy: $restart"
+      continue
+    }
+    [[ "$restart" == "never" ]] && {
       text error "Service $(text debug $service_name color_only) did exit with exit code $ec, not restarting due to restart policy"
       break
-    } || [[ "$restart" == "on-failure" ]] && {
+    }
+    [[ "$restart" == "on-failure" ]] && {
       [[ $ec -eq 0 ]] && {
         text info "Service $(text debug $service_name color_only) did exit with exit code $ec (not a failure), not restarting"
         break

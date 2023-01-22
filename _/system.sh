@@ -29,8 +29,9 @@ finish() {
     [ $pid -ne 0 ] && while [ -d /proc/$pid ] && [ $i -lt $retries ]; do
       ((i++))
       text info "Signaling service $(text debug ${service} color_only) ($pid) that children should not respawn (${i}/${retries})"
-      kill -USR1 $pid
       [ -e /proc/$pid/task/$pid/children ] && for child in $(</proc/$pid/task/$pid/children); do
+        # Make sure to collect child pids first, then send USR1 signal
+        kill -USR1 $pid
         while read signal; do
           i_term=0
           while [ $i_term -lt $kill_grace_period ]; do
