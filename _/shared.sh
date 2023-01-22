@@ -4,9 +4,9 @@ text() {
   local s
   case "${1}" in
     info) s=INFO; c=34;;
-    success) s=SUCCESS; c=32;;
+    success) s=GOOD; c=32;;
     warning) s=WARN; c=33;;
-    error) s=ERROR; c=31;;
+    error) s=BAD; c=31;;
     *) s=DEBUG; c=96;;
   esac
   shift
