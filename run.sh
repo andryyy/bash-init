@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-declare -ar CONFIG_PARAMS=(restart periodic_interval success_exit restart_retries restart_max_delay probe depends stop_signal dependency_failure_action reload_signal command)
+set -m
+
+declare -ar CONFIG_PARAMS=(restart periodic_interval success_exit restart_retries max_restart_delay probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
@@ -24,7 +26,7 @@ text debug "Spawned bash-init with PID $$"
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
-    for raw_service in ${@}; do
+    for raw_service in "${@}"; do
       service="$(trim_string "$raw_service")"
       ! regex_match "$service" '^(#?([a-zA-Z0-9_]+))$' && {
         text error "Invalid service name: ${service}"
@@ -35,16 +37,16 @@ for i in {1..2}; do
   } || {
     # Now source services and process
     . services.array
-    for raw_service in ${@}; do
+    for raw_service in "${@}"; do
       service="$(trim_string "$raw_service")"
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
       text info "Starting: $(text debug $service color_only)"
       > ${service}.env
-      for config in ${CONFIG_PARAMS[@]}; do
+      for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
-        for attr in ${!s[@]}; do
+        for attr in "${!s[@]}"; do
           [[ "$attr" == "$config" ]] && {
             user_config=1
             printf '%s="%s"\n' "$attr" "${s[$attr]}" >> ${service}.env
@@ -60,14 +62,24 @@ for i in {1..2}; do
   }
 done
 
+declare -i pid
+for key in "${!BACKGROUND_PIDS[@]}"; do
+  pid=${BACKGROUND_PIDS[$key]}
+  await_stop $pid
+  text info "Spawned service container $(text debug $key color_only) with PID $pid, starting command..."
+  kill -CONT $pid
+  text info "Service $(text debug $key color_only) started"
+done
+
 while true; do
-  declare -i pid
-  for key in ${!BACKGROUND_PIDS[@]}; do
+  for key in "${!BACKGROUND_PIDS[@]}"; do
     pid=${BACKGROUND_PIDS[$key]}
-    await_stop $pid
-    text info "Spawned service container $(text debug $key color_only) with PID $pid, starting command..."
-    kill -CONT $pid
-    text info "Service $(text debug $key color_only) started"
+    [ -d /proc/$pid ] && {
+      emit_pid_stats $pid
+    } || {
+      unset BACKGROUND_PIDS[$key]
+      text info "Service $key left the chat"
+    }
   done
-  read -u $sleep_fd||:
+  read -t 3 -u $sleep_fd||:
 done
