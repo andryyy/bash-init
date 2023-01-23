@@ -6,6 +6,11 @@ trap 'echo test' RETURN
 # Waiting for launch command
 kill -STOP $$
 
+mapfile -t packages < <(split "$system_packages" ",")
+for p in ${packages[@]}; do
+  command -v apk && apk --wait 30 add $(trim_string "$p")
+done
+
 declare -i i=0
 [ ! -z "$probe" ] && {
   mapfile -t params < <(split "$probe" ":")
@@ -42,7 +47,7 @@ while true && [ ! -v stop ]; do
     [[ "$restart" == "on-failure" ]] && {
       exit_ok=0
       mapfile -t expected_exits < <(split "$success_exit" ",")
-      for e in "${expected_exits[@]}"; do
+      for e in ${expected_exits[@]}; do
         regex_match "$e" "^[0-9]+$" && [[ $ec -eq $e ]] && exit_ok=1
       done
 

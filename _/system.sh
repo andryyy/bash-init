@@ -36,7 +36,7 @@ finish() {
         while [ $i_term -lt $kill_retries ] && [ $((i_term<=3?i_term:i_term*2)) -lt $max_kill_delay ] && [ -d /proc/$pid ]; do
           ((i_term++))
           text info "Sending service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${i_term}/${kill_retries})"
-          kill -${signal} -${pid}
+          kill -${signal} -${pid} 2>/dev/null
           # Grace a delay
           read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd||:
         done
