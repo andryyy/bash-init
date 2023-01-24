@@ -1,16 +1,8 @@
-example1=(
-  [system_packages]=busybox
-  [command]="false"
-  [restart]="on-failure"
-  [probe]="http:example.com:80:/:GET:200"
-  [success_exit]=1
-)
-
-example2=(
-  [system_packages]=busybox
-  [command]="sleep inf"
-  [restart]="on-failure"
+stress_ng=(
+  [system_packages]=stress-ng
+  [command]="stress-ng --vm 1 --vm-bytes 256M --vm-hang 0"
+  [restart]="never"
   [stop_signal]=SIGTERM
   [probe]="http:example.com:80:/:GET:200"
-  [success_exit]=0
+  [success_exit]=1
 )

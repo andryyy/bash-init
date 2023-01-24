@@ -4,19 +4,19 @@ text() {
   local s
   local t
   case "${1}" in
-    info) s=INFO; c=34;;
-    success) s=GOOD; c=32;;
+    info) s=INFO; c=96;;
+    success) s=SUCCESS; c=32;;
     warning) s=WARN; c=33;;
-    error) s=BAD; c=31;;
+    error) s=ERROR; c=31;;
     stats) s=STATS; c=35;;
-    *) s=DEBUG; c=96;;
+    *) s=DEBUG; c=94;;
   esac
   shift
   t=$(trim_all "$1")
   [[ "${!#}" == "color_only" ]] && {
     printf "\e[%sm%s\e[0m\n" "$c" "${@:1:${#}-1}"
   } || {
-    printf "\e[%sm[%s]\e[0m %s\n" "$c" "$s" "$t"
+    printf "\e[%sm%8s\e[0m %s\n" "$c" "$s" "$t"
   }
 }
 

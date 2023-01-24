@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -m
+set -mb
 cd "$(dirname "$0")"
 declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exit restart_retries max_restart_delay probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
@@ -71,14 +71,15 @@ for key in "${!BACKGROUND_PIDS[@]}"; do
 done
 
 while true; do
-  for key in "${!BACKGROUND_PIDS[@]}"; do
+  for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
     [ -d /proc/$pid ] && {
       emit_pid_stats $pid
     } || {
       unset BACKGROUND_PIDS[$key]
-      text info "Service $key left the chat"
+      text info "Service $key has left the chat"
     }
   done
+  [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }
   read -t 3 -u $sleep_fd||:
 done

@@ -38,7 +38,7 @@ finish() {
           ((i_term++))
           if kill -${signal} -${pid} 2>/dev/null; then
             text info "Sent service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${i_term}/${kill_retries})"
-            [ $i_term -eq 1 ] && read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd
+            read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd
           else
             break
           fi
@@ -47,7 +47,7 @@ finish() {
 
       # todo: reap zombies
       for child in ${pid_childs[@]}; do
-        [ -d /proc/$pid ] && {
+        [ -d /proc/$child ] && {
           text info "Found zombie process $child from service container $(text debug ${service} color_only) ($pid), terminating..."
           kill -9 $child
         } || {
