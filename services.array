@@ -3,14 +3,14 @@ example1=(
   [command]="false"
   [restart]="on-failure"
   [probe]="http:example.com:80:/:GET:200"
-  [success_exit]=0
+  [success_exit]=1
 )
 
 example2=(
   [system_packages]=busybox
   [command]="sleep inf"
   [restart]="on-failure"
-  [stop_signal]=SIGINT
+  [stop_signal]=SIGTERM
   [probe]="http:example.com:80:/:GET:200"
   [success_exit]=0
 )

@@ -24,6 +24,7 @@ finish() {
     # pid will be 0 if non integer
     [ $pid -ne 0 ] && while [ -d /proc/$pid ] && [ $i -lt $kill_retries ]; do
       ((i++))
+
       # Make sure to collect child pids first, then send USR1 signal:
       #  Some tools like "nc" quit on any signal; we want to make sure we are aware of all childs
       #  before sending a signal.
@@ -35,10 +36,12 @@ finish() {
         i_term=0
         while [ $i_term -lt $kill_retries ] && [ $((i_term<=3?i_term:i_term*2)) -lt $max_kill_delay ] && [ -d /proc/$pid ]; do
           ((i_term++))
-          text info "Sending service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${i_term}/${kill_retries})"
-          kill -${signal} -${pid} 2>/dev/null
-          # Grace a delay
-          read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd||:
+          if kill -${signal} -${pid} 2>/dev/null; then
+            text info "Sent service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${i_term}/${kill_retries})"
+            [ $i_term -eq 1 ] && read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd
+          else
+            break
+          fi
         done
       done < <(. ${service}.env ; split "$stop_signal" ",")
 

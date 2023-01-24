@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -mb
+set -m
 cd "$(dirname "$0")"
 declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exit restart_retries max_restart_delay probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
