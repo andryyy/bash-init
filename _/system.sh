@@ -85,6 +85,8 @@ emit_pid_stats() {
   pid=$1
   [ $pid -eq 0 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
 
+  [ ! -e /proc/$pid/smaps_rollup ] && return
+
   # Read RSS memory usage
   mapfile -n 2 -t rss </proc/$pid/smaps_rollup
   [[ ${rss[1]} =~ ([0-9]+) ]] && {

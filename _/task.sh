@@ -3,7 +3,8 @@
 # Do not allow for new process groups when running $command
 # This will prevent dedicated process groups and therefore zombie procs
 # Also disallow file globbing
-set -bf +m
+set -bf
+set +m
 exec &> /dev/stdout 2>&1
 trap "stop=1" USR1
 
@@ -11,13 +12,20 @@ trap "stop=1" USR1
 # This does also work when setting +m as we spawned this task in job control mode
 kill -STOP $$
 
+# Install additional packages
 mapfile -t packages < <(split "$system_packages" ",")
-for p in ${packages[@]}; do
-  command -v apk >/dev/null && { apk --wait 30 add $(trim_string "$p"); break; } || \
-  command -v apt >/dev/null && { apt install $(trim_string "$p"); break; } || \
-  text error "Cannot install additional system packages for service $(text debug $service_name color_only)"
-done
+[ ${#packages[@]} -ne 0 ] && {
+  text info "Installing additional system packages for service $(text debug $service_name color_only): $(trim_all "${packages[@]}")"
+  if command -v apk >/dev/null; then
+    apk --wait 30 add $(trim_all "${packages[@]}")
+  elif command -v apt >/dev/null; then
+    apt install $(trim_all "${packages[@]}")
+  else
+    text error "Cannot install additional system packages for service $(text debug $service_name color_only)"
+  fi ;
+}
 
+# Run probes
 declare -i i=0
 [ ! -z "$probe" ] && {
   mapfile -t params < <(split "$probe" ":")
@@ -42,34 +50,33 @@ mapfile -t expected_exits < <(split "$success_exit" ",")
 while true && [ ! -v stop ]; do
   $command &
   wait -f $!
-  ec=$?
+  command_exit_code=$?
 
   [ ! -v stop ] && {
-
     # Check for success exit codes
     for e in ${expected_exits[@]}; do
-      regex_match "$e" "^[0-9]+$" && [[ $ec -eq $e ]] && exit_ok=1
+      regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
     done
 
     # The command was executed, check how to handle restarts
     # never
     [[ "$restart" == "never" ]] && {
       [[ $exit_ok -eq 1 ]] && \
-        text info "Service $(text debug $service_name color_only) did exit with expected exit code $ec" || \
-        text info "Service $(text debug $service_name color_only) did exit with unexpected exit code $ec, not restarting due to restart policy never"
+        text info "Service $(text debug $service_name color_only) did exit with expected exit code $command_exit_code" || \
+        text info "Service $(text debug $service_name color_only) did exit with unexpected exit code $command_exit_code, not restarting due to restart policy never"
       break
     }
 
     # always|periodic
     [[ "$restart" =~ always|periodic ]] && {
-      text info "Service $(text debug $service_name color_only) did return exit code $ec, restarting due to policy: $restart"
+      text info "Service $(text debug $service_name color_only) did return exit code $command_exit_code, restarting due to policy: $restart"
       continue
     }
 
     # on-failure
     [[ "$restart" == "on-failure" ]] && {
       [[ $exit_ok -eq 1 ]] && {
-        text success "Service $(text debug $service_name color_only) did return $ec (expected: ${success_exit}), not restarting"
+        text success "Service $(text debug $service_name color_only) did return $command_exit_code (expected: ${success_exit}), not restarting"
         break
       }
 
@@ -77,9 +84,9 @@ while true && [ ! -v stop ]; do
       [ $i -lt $restart_retries ] && [ $((i<=3?i:i*2)) -lt $max_restart_delay ] && {
           ((i++))
           read -rt $((i<=3?i:i*2)) <> <(:)||:
-          text danger "Service $(text debug $service_name color_only) did exit with exit code $ec (failure), restarting (${i}/${restart_retries})"
+          text danger "Service $(text debug $service_name color_only) did exit with exit code $command_exit_code (failure), restarting (${i}/${restart_retries})"
       } || {
-        text danger "Service $(text debug $service_name color_only) did exit with exit code $ec (failure), giving up"
+        text danger "Service $(text debug $service_name color_only) did exit with exit code $command_exit_code (failure), giving up"
         break
       }
     }
