@@ -8,10 +8,6 @@ set +m
 exec &> /dev/stdout 2>&1
 trap "stop=1" USR1
 
-# Waiting for launch command
-# This does also work when setting +m as we spawned this task in job control mode
-kill -STOP $$
-
 # Install additional packages
 mapfile -t packages < <(split "$system_packages" ",")
 [ ${#packages[@]} -ne 0 ] && {
@@ -42,6 +38,10 @@ declare -i i=0
   done
   [ ! -v stop ] && text success "HTTP dependency for service $(text debug $service_name color_only) succeeded"
 }
+
+# Waiting for launch command
+# This does also work when setting +m as we spawned this task in job control mode
+kill -STOP $$
 
 declare -i i=0
 declare -i exit_ok=0
