@@ -47,7 +47,7 @@ finish() {
               read -t $await_exit -u $sleep_fd
             done
           else
-ö            break
+            break
           fi
         done
       done < <(. runtime/${service}.env ; split "$stop_signal" ",")
@@ -78,9 +78,10 @@ await_stop() {
   declare -i pid
   pid=$1
   while proc_exists $pid; do
-    regex_match "$(</proc/$pid/status)" 'State:\sT\s' 2> /dev/null && break
+    regex_match "$(</proc/$pid/status)" 'State:\sT\s' && return 0
     read -t 0.1 -u $sleep_fd||:
   done
+  return 1
 }
 
 emit_pid_stats() {

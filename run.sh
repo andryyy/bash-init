@@ -69,8 +69,7 @@ declare -i pid
 for key in "${!BACKGROUND_PIDS[@]}"; do
   pid=${BACKGROUND_PIDS[$key]}
   text info "Spawned service container $(text debug $key color_only) with PID $pid, preparing environment..."
-  await_stop $pid
-  proc_exists $pid && {
+  await_stop $pid && {
     kill -CONT $pid
     text info "Service $(text debug $key color_only) is ready and was started"
   }
@@ -89,8 +88,7 @@ while true; do
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
         text info "Respawned service container $(text debug $key color_only) with PID $_pid, starting command..."
-        await_stop $_pid
-        proc_exists $_pid && {
+        await_stop $_pid && {
           kill -CONT $_pid
           text info "Service $(text debug $key color_only) started"
         } ||:

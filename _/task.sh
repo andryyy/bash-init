@@ -5,7 +5,7 @@
 # Also disallow file globbing
 set -bf
 set +m
-exec &> /dev/stdout 2>&1
+#exec &> /dev/stdout 2>&1
 
 service_colored=$(text debug $service_name color_only)
 
