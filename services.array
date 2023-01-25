@@ -5,6 +5,7 @@ stress_ng=(
   [stop_signal]=0,15
   [probe]="http:example.com:81:/:GET:200"
   [success_exit]=0
+  [probe_tries]=3
 )
 
 python=(

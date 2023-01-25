@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 rm -f runtime/*env
 
-declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_tries restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
+declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_tries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
@@ -61,6 +61,7 @@ for i in {1..2}; do
       env_file=runtime/${service}.env bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
+      text info "Spawned service container $(text debug $service color_only) with PID $pid, preparing environment..."
     done
   }
 done
@@ -68,11 +69,13 @@ done
 declare -i pid
 for key in "${!BACKGROUND_PIDS[@]}"; do
   pid=${BACKGROUND_PIDS[$key]}
-  text info "Spawned service container $(text debug $key color_only) with PID $pid, preparing environment..."
-  await_stop $pid && {
+  if await_stop $pid; then
     kill -CONT $pid
-    text info "Service $(text debug $key color_only) is ready and was started"
-  }
+    text success "Service container $(text debug $key color_only) was initialized"
+  else
+    text error "Service container $(text debug $key color_only) could not be initialized"
+    #todo: optional unset BACKGROUND_PIDS[$key]
+  fi
 done
 
 declare -i run_loop=0
@@ -87,10 +90,10 @@ while true; do
         env_file=runtime/${key}.env bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
-        text info "Respawned service container $(text debug $key color_only) with PID $_pid, starting command..."
+        text warning "Restarting initialization of service container $(text debug $key color_only) with PID $_pid, starting command..."
         await_stop $_pid && {
           kill -CONT $_pid
-          text info "Service $(text debug $key color_only) started"
+          text success "Service container $(text debug $key color_only) was started"
         } ||:
       } || {
         unset BACKGROUND_PIDS[$key]

@@ -29,21 +29,27 @@ mapfile -t packages < <(split "$system_packages" ",")
 }
 
 # Run probes
+(
 declare -i i=0
 [ ! -z "$probe" ] && {
-  mapfile -t params < <(split "$probe" ":")
-  while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
-    ((i++))
-    [ $i -lt $probe_tries ] && {
-      text warning "Service $service_colored has an unmet HTTP probe (${i}/${probe_tries})"
-      read -rt $i <> <(:)||:
-    } || {
-      text error "Service $service_colored terminates due to unmet HTTP probe"
-      kill -TERM -$$
-    }
+  while true; do
+    mapfile -t params < <(split "$probe" ":")
+    while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
+      ((i++))
+      [ $i -lt $probe_tries ] && {
+        text warning "Service $service_colored has a failing HTTP probe (${i}/${probe_tries})"
+        read -rt $i <> <(:)||:
+      } || {
+        text error "Service $service_colored terminates due to failing HTTP probe"
+        [[ "$probe_failure_action" == "terminate" ]] && kill -TERM -$$
+      }
+    done
+    text success "HTTP probe for service $service_colored succeeded"
+    [ $continous_probe -eq 0 ] && break
+    read -rt $probe_interval <> <(:)||:
   done
-  text success "HTTP probe for service $service_colored succeeded"
 }
+)&
 
 # Waiting for launch command
 # This does also work when setting +m as we spawned this task in job control mode
@@ -51,6 +57,7 @@ kill -STOP $$
 
 declare -i i=0
 declare -i exit_ok=0
+declare -i launched=1
 mapfile -t expected_exits < <(split "$success_exit" ",")
 
 $command &
