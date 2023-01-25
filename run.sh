@@ -5,6 +5,7 @@ declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exi
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
+. _/bash-init.config
 . _/system.sh
 . _/shared.sh
 
@@ -72,11 +73,13 @@ for key in "${!BACKGROUND_PIDS[@]}"; do
   }
 done
 
+declare -i run_loop=0
 while true; do
+  ((run_loop++))
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
     proc_exists -$pid && {
-      emit_pid_stats $pid
+      [ $((run_loop%emit_stats_interval)) -eq 0 ] && emit_pid_stats $pid ||:
     } || {
       [ -f ${key}.env ] && {
         env_file=${key}.env bash _/task.sh &
@@ -93,5 +96,5 @@ while true; do
     }
   done
   [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }
-  read -t 3 -u $sleep_fd||:
+  read -t 1 -u $sleep_fd||:
 done
