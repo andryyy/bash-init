@@ -49,7 +49,7 @@ finish() {
               read -t $await_exit -u $sleep_fd
             done
           else
-            break
+ö            break
           fi
         done
       done < <(. ${service}.env ; split "$stop_signal" ",")
@@ -69,8 +69,7 @@ finish() {
       text warning "Service container process group $(text debug ${service} color_only) ($pid) did not exit, terminating"
       kill -9 -$pid
     }
-    
-    rm ${service}.env
+  rm ${service}.env
   done
   exit
 }
@@ -80,7 +79,8 @@ await_stop() {
   # declare inside a function automatically makes the variable local
   declare -i pid
   pid=$1
-  proc_exists $pid && until regex_match "$(</proc/$pid/status)" 'State:\sT\s'; do
+  while proc_exists -$pid; do
+    regex_match "$(</proc/$pid/status)" 'State:\sT\s' && break
     read -t 0.1 -u $sleep_fd||:
   done
 }

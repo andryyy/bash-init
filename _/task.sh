@@ -12,6 +12,12 @@ service_colored=$(text debug $service_name color_only)
 # Install additional packages
 mapfile -t packages < <(split "$system_packages" ",")
 [ ${#packages[@]} -ne 0 ] && {
+  # todo: read from proc
+  [[ $(id -u) -ne 0 ]] && {
+    text error "Cannot install packages for service $service_colored as non-root user"
+    rm ${service_name}.env
+    kill -TERM -$$
+  }
   text info "Installing additional system packages for service ${service_colored}: $(trim_all "${packages[@]}")"
   if command -v apk >/dev/null; then
     apk --wait 30 add $(trim_all "${packages[@]}")
