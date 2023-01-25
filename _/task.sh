@@ -28,23 +28,26 @@ mapfile -t packages < <(split "$system_packages" ",")
   fi ;
 }
 
-# Run probes
+# Run probes in background
 (
-declare -i i=0
+declare -i probe_counter=0
 [ ! -z "$probe" ] && {
+  mapfile -t params < <(split "$probe" ":")
+  echo 'service_healthy="0"' > runtime/${service_name}_health.env
   while true; do
-    mapfile -t params < <(split "$probe" ":")
     while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
       ((i++))
-      [ $i -lt $probe_tries ] && {
-        text warning "Service $service_colored has a failing HTTP probe (${i}/${probe_tries})"
-        read -rt $i <> <(:)||:
+      [ $probe_counter -lt $probe_tries ] && {
+        text warning "Service $service_colored has a failing HTTP probe (${probe_counter}/${probe_tries})"
+        read -rt $probe_counter <> <(:)||:
       } || {
         text error "Service $service_colored terminates due to failing HTTP probe"
+        echo 'service_healthy="0"' > runtime/${service_name}_health.env
         [[ "$probe_failure_action" == "terminate" ]] && kill -TERM -$$
       }
     done
     text success "HTTP probe for service $service_colored succeeded"
+    echo 'service_healthy="1"' > runtime/${service_name}_health.env
     [ $continous_probe -eq 0 ] && break
     read -rt $probe_interval <> <(:)||:
   done
@@ -55,13 +58,14 @@ declare -i i=0
 # This does also work when setting +m as we spawned this task in job control mode
 kill -STOP $$
 
-declare -i i=0
 declare -i exit_ok=0
 declare -i launched=1
 mapfile -t expected_exits < <(split "$success_exit" ",")
 
-$command &
-wait -f $!
+$command & pid=$!
+launched=1
+wait -f $pid
+
 command_exit_code=$?
 [[ $command_exit_code -ge 128 ]] && \
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
