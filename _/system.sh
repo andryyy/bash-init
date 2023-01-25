@@ -94,7 +94,7 @@ emit_pid_stats() {
   pid=$1
   [ $pid -eq 0 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
 
-  ! proc_exists $pid && return
+  ! proc_exists -$pid && return
 
   # Read RSS memory usage
   mapfile -n 2 -t rss </proc/$pid/smaps_rollup
@@ -105,6 +105,7 @@ emit_pid_stats() {
   pid_childs=$(collect_childs $pid)
 
   for child in ${pid_childs[@]}; do
+    ! proc_exists $child && continue
     mapfile -n 2 -t rss </proc/$child/smaps_rollup
     [[ ${rss[1]} =~ ([0-9]+) ]] && {
       memory_usage=$(( $memory_usage + "${BASH_REMATCH[1]}" ))
