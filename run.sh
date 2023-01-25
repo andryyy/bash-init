@@ -2,8 +2,6 @@
 set -mb
 cd "$(dirname "$0")"
 
-rm -f runtime/*env
-
 declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_tries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
@@ -11,6 +9,8 @@ declare -A BACKGROUND_PIDS
 . _/bash-init.config
 . _/system.sh
 . _/shared.sh
+
+cleanup_bash_init
 
 trap "exit" INT TERM
 trap "finish" EXIT

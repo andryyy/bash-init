@@ -10,6 +10,13 @@ check_defaults() {
   [[ -v has_missing ]] && exit 1
 }
 
+cleanup_bash_init() {
+  rm -f runtime/*env
+  rm -f runtime/probes/http/*
+  rm -f runtime/probes/tcp/*
+  rm -f runtime/terminate
+}
+
 proc_exists() {
   kill -0 $1 2>/dev/null
 }
@@ -22,6 +29,8 @@ finish() {
   declare -i pid
   declare -a pid_childs
   local service
+
+  echo 1 > runtime/terminate
 
   for service in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$service]}
@@ -67,7 +76,7 @@ finish() {
       text warning "Service container process group $(text debug ${service} color_only) ($pid) did not exit, terminating"
       kill -9 -$pid
     }
-  rm runtime/${service}.env
+
   done
   exit
 }

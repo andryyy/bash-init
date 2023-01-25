@@ -20,6 +20,14 @@ text() {
   }
 }
 
+cleanup_service_files() {
+  local service_name=$(trim_string "$1")
+  [ -f runtime/${service_name}.env ] && rm runtime/${service_name}.env
+  [ -f runtime/probes/http/${service_name} ] && rm runtime/probes/http/${service_name}
+  [ -f runtime/probes/tcp/${service_name} ] && rm runtime/probes/tcp/${service_name}
+  return 0
+}
+
 join_array() {
   # join $2 by $1
   local d=${1-} f=${2-}
