@@ -31,8 +31,6 @@ finish() {
       ((i++))
 
       pid_childs=$(collect_childs $pid)
-      text info "Signaling service container $(text debug ${service} color_only) ($pid) that children should not respawn (${i}/${kill_retries})"
-
       while read signal; do
         kill_retry=0
         while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
@@ -52,7 +50,7 @@ finish() {
 ö            break
           fi
         done
-      done < <(. ${service}.env ; split "$stop_signal" ",")
+      done < <(. runtime/${service}.env ; split "$stop_signal" ",")
 
       for child in ${pid_childs[@]}; do
         proc_exists $child && {
@@ -69,7 +67,7 @@ finish() {
       text warning "Service container process group $(text debug ${service} color_only) ($pid) did not exit, terminating"
       kill -9 -$pid
     }
-  rm ${service}.env
+  rm runtime/${service}.env
   done
   exit
 }
@@ -79,8 +77,8 @@ await_stop() {
   # declare inside a function automatically makes the variable local
   declare -i pid
   pid=$1
-  while proc_exists -$pid; do
-    regex_match "$(</proc/$pid/status)" 'State:\sT\s' && break
+  while proc_exists $pid; do
+    regex_match "$(</proc/$pid/status)" 'State:\sT\s' 2> /dev/null && break
     read -t 0.1 -u $sleep_fd||:
   done
 }

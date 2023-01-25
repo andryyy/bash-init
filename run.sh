@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -mb
 cd "$(dirname "$0")"
-declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
+
+rm -f runtime/*.env
+
+declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
@@ -43,19 +46,19 @@ for i in {1..2}; do
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
       text info "Starting: $(text debug $service color_only)"
-      > ${service}.env
+      > runtime/${service}.env
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
         for attr in "${!s[@]}"; do
           [[ "$attr" == "$config" ]] && {
             user_config=1
-            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> ${service}.env
+            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> runtime/${service}.env
           }
         done
-        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> ${service}.env
+        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/${service}.env
       done
-      printf 'service_name="%s"\n' "$service" >> ${service}.env
-      env_file=${service}.env bash _/task.sh &
+      printf 'service_name="%s"\n' "$service" >> runtime/${service}.env
+      env_file=runtime/${service}.env bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
     done
@@ -67,7 +70,7 @@ for key in "${!BACKGROUND_PIDS[@]}"; do
   pid=${BACKGROUND_PIDS[$key]}
   text info "Spawned service container $(text debug $key color_only) with PID $pid, preparing environment..."
   await_stop $pid
-  proc_exists -$pid && {
+  proc_exists $pid && {
     kill -CONT $pid
     text info "Service $(text debug $key color_only) is ready and was started"
   }
@@ -78,17 +81,19 @@ while true; do
   ((run_loop++))
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    proc_exists -$pid && {
+    proc_exists $pid && {
       [ $((run_loop%emit_stats_interval)) -eq 0 ] && emit_pid_stats $pid ||:
     } || {
-      [ -f ${key}.env ] && {
-        env_file=${key}.env bash _/task.sh &
+      [ -f runtime/${key}.env ] && {
+        env_file=runtime/${key}.env bash _/task.sh &
         _pid=$!
-        await_stop $_pid
+        BACKGROUND_PIDS[$key]=$_pid
         text info "Respawned service container $(text debug $key color_only) with PID $_pid, starting command..."
-        kill -CONT $_pid
-        text info "Service $(text debug $key color_only) started"
-        BACKGROUND_PIDS[$key]=$!
+        await_stop $_pid
+        proc_exists $_pid && {
+          kill -CONT $_pid
+          text info "Service $(text debug $key color_only) started"
+        } ||:
       } || {
         unset BACKGROUND_PIDS[$key]
         text info "Service $key has left the chat"

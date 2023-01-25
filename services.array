@@ -3,7 +3,7 @@ stress_ng=(
   [command]="stress-ng --vm 1 --vm-bytes 512M --vm-hang 0"
   [restart]="on-failure"
   [stop_signal]=0,15
-  [probe]="http:example.com:80:/:GET:200"
+  [probe]="http:example.com:81:/:GET:200"
   [success_exit]=0
 )
 

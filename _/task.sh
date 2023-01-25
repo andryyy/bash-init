@@ -15,7 +15,7 @@ mapfile -t packages < <(split "$system_packages" ",")
   # todo: read from proc
   [[ $(id -u) -ne 0 ]] && {
     text error "Cannot install packages for service $service_colored as non-root user"
-    rm ${service_name}.env
+    rm runtime/${service_name}.env
     kill -TERM -$$
   }
   text info "Installing additional system packages for service ${service_colored}: $(trim_all "${packages[@]}")"
@@ -32,17 +32,17 @@ mapfile -t packages < <(split "$system_packages" ",")
 declare -i i=0
 [ ! -z "$probe" ] && {
   mapfile -t params < <(split "$probe" ":")
-  while ! run_with_timeout http_probe ${params[@]:1}; do
+  while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
     ((i++))
-    [ $i -lt $restart_retries ] && {
-      text warning "Service $service_colored has an unmet HTTP dependency (${i}/${restart_retries})"
-      read -rt $((2*$i)) <> <(:)||:
+    [ $i -lt $probe_retries ] && {
+      text warning "Service $service_colored has an unmet HTTP probe (${i}/${probe_retries})"
+      read -rt $i <> <(:)||:
     } || {
-      text error "Service $service_colored terminates due to unmet HTTP dependency"
+      text error "Service $service_colored terminates due to unmet HTTP probe"
       kill -TERM -$$
     }
   done
-  text success "HTTP dependency for service $service_colored succeeded"
+  text success "HTTP probe for service $service_colored succeeded"
 }
 
 # Waiting for launch command
@@ -89,5 +89,5 @@ done
 }
 
 text info "Self-destroying service container (process group $$) of service $service_colored now"
-rm ${service_name}.env
+rm runtime/${service_name}.env
 kill -TERM -$$
