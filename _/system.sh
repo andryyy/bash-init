@@ -38,7 +38,7 @@ finish() {
         while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
           ((kill_retry++))
           if kill -${signal} -${pid} 2>/dev/null; then
-            text info "Sent service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${kill_retry}/${kill_retries})"
+            text info "Sent service container process group $(text debug ${service} color_only) ($pid) signal $signal (${kill_retry}/${kill_retries})"
             await_exit=0
             while [ $await_exit -lt $max_kill_delay ]; do
               ! proc_exists -${pid} && break
