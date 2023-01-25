@@ -11,7 +11,7 @@ check_defaults() {
 }
 
 proc_exists() {
-  kill -0 ${1} 2>/dev/null
+  kill -0 $1 2>/dev/null
 }
 
 finish() {
