@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -mb
 cd "$(dirname "$0")"
-declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exit restart_retries max_restart_delay probe depends stop_signal dependency_failure_action reload_signal command)
+declare -ar CONFIG_PARAMS=(system_packages restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
@@ -73,11 +73,21 @@ done
 while true; do
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    [ -d /proc/$pid ] && {
+    proc_exists -$pid && {
       emit_pid_stats $pid
     } || {
-      unset BACKGROUND_PIDS[$key]
-      text info "Service $key has left the chat"
+      [ -f ${key}.env ] && {
+        env_file=${key}.env bash _/task.sh &
+        _pid=$!
+        await_stop $_pid
+        text info "Respawned service container $(text debug $key color_only) with PID $_pid, starting command..."
+        kill -CONT $_pid
+        text info "Service $(text debug $key color_only) started"
+        BACKGROUND_PIDS[$key]=$!
+      } || {
+        unset BACKGROUND_PIDS[$key]
+        text info "Service $key has left the chat"
+      }
     }
   done
   [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }

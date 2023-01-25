@@ -10,10 +10,15 @@ check_defaults() {
   [[ -v has_missing ]] && exit 1
 }
 
+proc_exists() {
+  kill -0 ${1} 2>/dev/null
+}
+
 finish() {
   # declare inside a function automatically makes the variable local
   declare -i i
   declare -i i_term
+  declare -i await_exit
   declare -i pid
   declare -a pid_childs
   local service
@@ -22,23 +27,27 @@ finish() {
     pid=${BACKGROUND_PIDS[$service]}
     i=0
     # pid will be 0 if non integer
-    [ $pid -ne 0 ] && while [ -d /proc/$pid ] && [ $i -lt $kill_retries ]; do
+    [ $pid -ne 0 ] && while proc_exists $pid && [ $i -lt $kill_retries ]; do
       ((i++))
 
-      # Make sure to collect child pids first, then send USR1 signal:
-      #  Some tools like "nc" quit on any signal; we want to make sure we are aware of all childs
-      #  before sending a signal.
       pid_childs=$(collect_childs $pid)
-      text info "Signaling service container $(text debug ${service} color_only) ($pid) that children should not respawn (${i}/${retries})"
-      kill -USR1 $pid
+      text info "Signaling service container $(text debug ${service} color_only) ($pid) that children should not respawn (${i}/${kill_retries})"
 
       while read signal; do
-        i_term=0
-        while [ $i_term -lt $kill_retries ] && [ $((i_term<=3?i_term:i_term*2)) -lt $max_kill_delay ] && [ -d /proc/$pid ]; do
-          ((i_term++))
+        kill_retry=0
+        while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
+          ((kill_retry++))
           if kill -${signal} -${pid} 2>/dev/null; then
-            text info "Sent service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${i_term}/${kill_retries})"
-            read -t $((i_term<=3?i_term:i_term*2)) -u $sleep_fd
+            text info "Sent service container process group $(text debug ${service} color_only) ($pid) a $signal signal (${kill_retry}/${kill_retries})"
+            await_exit=0
+            while [ $await_exit -lt $max_kill_delay ]; do
+              ! proc_exists -${pid} && break
+              ((await_exit++))
+              # Slow down
+              await_exit=$((await_exit<=3?await_exit:await_exit*2))
+              text info "Waiting ${await_exit}s for service container process group $(text debug ${service} color_only) ($pid) to stop"
+              read -t $await_exit -u $sleep_fd
+            done
           else
             break
           fi
@@ -47,7 +56,7 @@ finish() {
 
       # todo: reap zombies
       for child in ${pid_childs[@]}; do
-        [ -d /proc/$child ] && {
+        proc_exists $child && {
           text info "Found zombie process $child from service container $(text debug ${service} color_only) ($pid), terminating..."
           kill -9 $child
         } || {
@@ -57,7 +66,7 @@ finish() {
 
     done
 
-    [ -d /proc/$pid ] && {
+    proc_exists -$pid && {
       text warning "Service container $(text debug ${service} color_only) ($pid) did not exit, terminating..."
       kill -9 -$pid
     }
@@ -71,7 +80,7 @@ await_stop() {
   # declare inside a function automatically makes the variable local
   declare -i pid
   pid=$1
-  [ -d /proc/$pid ] && until regex_match "$(</proc/$pid/status)" 'State:\sT\s'; do
+  proc_exists $pid && until regex_match "$(</proc/$pid/status)" 'State:\sT\s'; do
     read -t 0.1 -u $sleep_fd||:
   done
 }
@@ -85,7 +94,7 @@ emit_pid_stats() {
   pid=$1
   [ $pid -eq 0 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
 
-  [ ! -e /proc/$pid/smaps_rollup ] && return
+  ! proc_exists $pid && return
 
   # Read RSS memory usage
   mapfile -n 2 -t rss </proc/$pid/smaps_rollup

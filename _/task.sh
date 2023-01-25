@@ -6,18 +6,19 @@
 set -bf
 set +m
 exec &> /dev/stdout 2>&1
-trap "stop=1" USR1
+
+service_colored=$(text debug $service_name color_only)
 
 # Install additional packages
 mapfile -t packages < <(split "$system_packages" ",")
 [ ${#packages[@]} -ne 0 ] && {
-  text info "Installing additional system packages for service $(text debug $service_name color_only): $(trim_all "${packages[@]}")"
+  text info "Installing additional system packages for service ${service_colored}: $(trim_all "${packages[@]}")"
   if command -v apk >/dev/null; then
     apk --wait 30 add $(trim_all "${packages[@]}")
   elif command -v apt >/dev/null; then
     apt install $(trim_all "${packages[@]}")
   else
-    text error "Cannot install additional system packages for service $(text debug $service_name color_only)"
+    text error "Cannot install additional system packages for service $service_colored"
   fi ;
 }
 
@@ -25,18 +26,17 @@ mapfile -t packages < <(split "$system_packages" ",")
 declare -i i=0
 [ ! -z "$probe" ] && {
   mapfile -t params < <(split "$probe" ":")
-  while ! run_with_timeout http_probe ${params[@]:1} && [ ! -v stop ]; do
+  while ! run_with_timeout http_probe ${params[@]:1}; do
     ((i++))
     [ $i -lt $restart_retries ] && {
-      text warning "Service $(text debug $service_name color_only) has an unmet HTTP dependency (${i}/${restart_retries})"
+      text warning "Service $service_colored has an unmet HTTP dependency (${i}/${restart_retries})"
       read -rt $((2*$i)) <> <(:)||:
     } || {
-      text error "Service $(text debug $service_name color_only) terminates due to unmet HTTP dependency"
-      stop=1
-      break
+      text error "Service $service_colored terminates due to unmet HTTP dependency"
+      kill -TERM -$$
     }
   done
-  [ ! -v stop ] && text success "HTTP dependency for service $(text debug $service_name color_only) succeeded"
+  text success "HTTP dependency for service $service_colored succeeded"
 }
 
 # Waiting for launch command
@@ -47,51 +47,41 @@ declare -i i=0
 declare -i exit_ok=0
 mapfile -t expected_exits < <(split "$success_exit" ",")
 
-while true && [ ! -v stop ]; do
-  $command &
-  wait -f $!
-  command_exit_code=$?
+$command &
+wait -f $!
+command_exit_code=$?
+[[ $command_exit_code -ge 128 ]] && \
+  text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
-  [ ! -v stop ] && {
-    # Check for success exit codes
-    for e in ${expected_exits[@]}; do
-      regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
-    done
-
-    # The command was executed, check how to handle restarts
-    # never
-    [[ "$restart" == "never" ]] && {
-      [[ $exit_ok -eq 1 ]] && \
-        text info "Service $(text debug $service_name color_only) did exit with expected exit code $command_exit_code" || \
-        text info "Service $(text debug $service_name color_only) did exit with unexpected exit code $command_exit_code, not restarting due to restart policy never"
-      break
-    }
-
-    # always|periodic
-    [[ "$restart" =~ always|periodic ]] && {
-      text info "Service $(text debug $service_name color_only) did return exit code $command_exit_code, restarting due to policy: $restart"
-      continue
-    }
-
-    # on-failure
-    [[ "$restart" == "on-failure" ]] && {
-      [[ $exit_ok -eq 1 ]] && {
-        text success "Service $(text debug $service_name color_only) did return $command_exit_code (expected: ${success_exit}), not restarting"
-        break
-      }
-
-      # Exit code does not indicate success
-      [ $i -lt $restart_retries ] && [ $((i<=3?i:i*2)) -lt $max_restart_delay ] && {
-          ((i++))
-          read -rt $((i<=3?i:i*2)) <> <(:)||:
-          text danger "Service $(text debug $service_name color_only) did exit with exit code $command_exit_code (failure), restarting (${i}/${restart_retries})"
-      } || {
-        text danger "Service $(text debug $service_name color_only) did exit with exit code $command_exit_code (failure), giving up"
-        break
-      }
-    }
-  }
+# Check for success exit codes
+for e in ${expected_exits[@]}; do
+  regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
 done
 
-text info "Self-destroying service container (process group $$) of service $(text debug $service_name color_only) now"
+# The command was executed, check how to handle restarts
+# never
+[[ "$restart" == "never" ]] && {
+  [[ $exit_ok -eq 1 ]] && \
+    text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]" || \
+    text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
+}
+
+# always|periodic
+[[ "$restart" =~ always|periodic ]] && {
+  text info "Service $service_colored did exit with code $command_exit_code [restart=$restart]"
+  kill -TERM -$$
+}
+
+# on-failure
+[[ "$restart" == "on-failure" ]] && {
+  [[ $exit_ok -eq 1 ]] && {
+    text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]"
+  } || {
+    text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
+    kill -TERM -$$
+  }
+}
+
+text info "Self-destroying service container (process group $$) of service $service_colored now"
+rm ${service_name}.env
 kill -TERM -$$
