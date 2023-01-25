@@ -2,9 +2,9 @@
 set -mb
 cd "$(dirname "$0")"
 
-rm -f runtime/*.env
+rm -f runtime/*env
 
-declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
+declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_tries restart periodic_interval success_exit probe depends stop_signal dependency_failure_action reload_signal command)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config

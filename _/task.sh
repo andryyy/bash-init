@@ -34,8 +34,8 @@ declare -i i=0
   mapfile -t params < <(split "$probe" ":")
   while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
     ((i++))
-    [ $i -lt $probe_retries ] && {
-      text warning "Service $service_colored has an unmet HTTP probe (${i}/${probe_retries})"
+    [ $i -lt $probe_tries ] && {
+      text warning "Service $service_colored has an unmet HTTP probe (${i}/${probe_tries})"
       read -rt $i <> <(:)||:
     } || {
       text error "Service $service_colored terminates due to unmet HTTP probe"
