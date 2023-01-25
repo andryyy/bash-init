@@ -17,7 +17,7 @@ proc_exists() {
 finish() {
   # declare inside a function automatically makes the variable local
   declare -i i
-  declare -i i_term
+  declare -i kill_retry
   declare -i await_exit
   declare -i pid
   declare -a pid_childs
@@ -54,10 +54,9 @@ finish() {
         done
       done < <(. ${service}.env ; split "$stop_signal" ",")
 
-      # todo: reap zombies
       for child in ${pid_childs[@]}; do
         proc_exists $child && {
-          text info "Found zombie process $child from service container $(text debug ${service} color_only) ($pid), terminating..."
+          text warning "Child process $child from service container $(text debug ${service} color_only) ($pid) did not exit, terminating"
           kill -9 $child
         } || {
           text success "Child process $child from service container $(text debug ${service} color_only) is gone"
@@ -67,9 +66,10 @@ finish() {
     done
 
     proc_exists -$pid && {
-      text warning "Service container $(text debug ${service} color_only) ($pid) did not exit, terminating..."
+      text warning "Service container process group $(text debug ${service} color_only) ($pid) did not exit, terminating"
       kill -9 -$pid
     }
+    
     rm ${service}.env
   done
   exit
