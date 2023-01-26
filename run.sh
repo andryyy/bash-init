@@ -2,13 +2,13 @@
 set -mb
 cd "$(dirname "$0")"
 
-declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
+declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
 . _/bash-init.config
 . _/system.sh
-. _/shared.sh
+. _/tools.sh
 
 cleanup_bash_init
 
@@ -81,10 +81,16 @@ while true; do
   ((run_loop++))
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    proc_exists $pid && {
-      if [ $((run_loop%emit_stats_interval)) -eq 0 ]; then emit_pid_stats $pid; run_loop=0; fi
-    } || {
-      [ -f runtime/envs/${key} ] && {
+    if proc_exists $pid; then
+      if [ $((run_loop%emit_stats_interval)) -eq 0 ]; then
+        emit_pid_stats $pid
+        run_loop=0
+      fi
+      if [ -f runtime/messages/${key}.stop ]; then
+        stop_service $key $(<runtime/messages/${key}.stop)
+      fi
+    else
+      if [ -f runtime/envs/${key} ]; then
         env_file=runtime/envs/${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
@@ -93,11 +99,12 @@ while true; do
           kill -CONT $_pid
           text success "Service container $(text debug $key color_only) was started"
         } ||:
-      } || {
+      else
         unset BACKGROUND_PIDS[$key]
+        cleanup_service_files $key
         text info "Service $key has left the chat"
-      }
-    }
+      fi
+    fi
   done
   [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }
   sleep 1

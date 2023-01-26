@@ -20,74 +20,15 @@ cleanup_bash_init() {
   return 0
 }
 
-proc_exists() {
-  kill -0 $1 2>/dev/null
-}
-
 exit_trap(){
   for service in ${!BACKGROUND_PIDS[@]}; do
-    stop_service $service &
+    stop_service $service stop &
   done
   text info "Waiting for shutdown jobs to complete"
   wait
   cleanup_bash_init
   text success "Done"
   exit
-}
-
-stop_service() {
-  local service=$(trim_string "$1")
-  declare -i signal_retry=0
-  declare -i kill_retry
-  declare -i await_exit
-  declare -i pid
-  declare -a pid_childs
-  declare -a stop_services
-  declare -i pid=${BACKGROUND_PIDS[$service]}
-
-  [ $pid -ne 0 ] && while proc_exists $pid && [ $signal_retry -lt $kill_retries ]; do
-    echo 1 > runtime/messages/${service}.terminate
-    ((signal_retry++))
-    pid_childs=$(collect_childs $pid)
-
-    while read signal; do
-      kill_retry=0
-      while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
-        ((kill_retry++))
-        if kill -${signal} -${pid} 2>/dev/null; then
-          text info "Sent service container process group $(text debug ${service} color_only) ($pid) signal $signal (${kill_retry}/${kill_retries})"
-          await_exit=0
-          while [ $await_exit -lt $max_kill_delay ]; do
-            ! proc_exists -${pid} && break
-            ((await_exit++))
-            # Slow down
-            await_exit=$((await_exit<=3?await_exit:await_exit*2))
-            text info "Waiting ${await_exit}s for service container process group $(text debug ${service} color_only) ($pid) to stop"
-            sleep $await_exit
-          done
-        else
-          break
-        fi
-      done
-    done < <(. runtime/envs/${service} ; split "$stop_signal" ",")
-
-    for child in ${pid_childs[@]}; do
-      proc_exists $child && {
-        text warning "Child process $child from service container $(text debug ${service} color_only) ($pid) did not exit, terminating"
-        kill -9 $child
-      } || {
-        text success "Child process $child from service container $(text debug ${service} color_only) is gone"
-      }
-    done
-
-  done
-
-  proc_exists -$pid && {
-    text warning "Service container process group $(text debug ${service} color_only) ($pid) did not exit, terminating"
-    kill -9 -$pid
-  }
-
-  unset BACKGROUND_PIDS[$service]
 }
 
 await_stop() {
@@ -149,6 +90,75 @@ emit_pid_stats() {
     )
 }
 
+stop_service() {
+  # Policy can be stop or restart
+  local service=$(trim_string "$1")
+  local policy=$(trim_string "$2")
+  declare -i signal_retry=0
+  declare -i kill_retry
+  declare -i await_exit
+  declare -i pid
+  declare -a pid_childs
+  declare -a stop_services
+  declare -i pid=${BACKGROUND_PIDS[$service]}
+
+  [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  regex_match "$policy" "(restart|stop)" || { text error "${FUNCNAME[0]}: Invalid policy"; return 1; }
+
+  [ $pid -ne 0 ] && while proc_exists $pid && [ $signal_retry -lt $kill_retries ]; do
+    echo 1 > runtime/messages/${service}.no_restart
+    ((signal_retry++))
+    pid_childs=$(collect_childs $pid)
+
+    while read signal; do
+      kill_retry=0
+      while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
+        ((kill_retry++))
+        if kill -${signal} -${pid} 2>/dev/null; then
+          text info "Sent service container process group $(text debug $service color_only) ($pid) signal $signal (${kill_retry}/${kill_retries})"
+          await_exit=0
+          while [ $await_exit -lt $max_kill_delay ]; do
+            ! proc_exists -${pid} && break
+            ((await_exit++))
+            # Slow down
+            await_exit=$((await_exit<=3?await_exit:await_exit*2))
+            text info "Waiting ${await_exit}s for service container process group $(text debug $service color_only) ($pid) to stop"
+            sleep $await_exit
+          done
+        else
+          break
+        fi
+      done
+    done < <(. runtime/envs/${service} ; split "$stop_signal" ",")
+
+    for child in ${pid_childs[@]}; do
+      proc_exists $child && {
+        text warning "Child process $child from service container $(text debug $service color_only) ($pid) did not exit, terminating"
+        kill -9 $child
+      } || {
+        text success "Child process $child from service container $(text debug $service color_only) is gone"
+      }
+    done
+
+  done
+
+  proc_exists -$pid && {
+    text warning "Service container process group $(text debug $service color_only) ($pid) did not exit, terminating"
+    kill -9 -$pid
+  }
+
+  if [[ "$policy" == "stop" ]]; then
+    text info "Service container process group $(text debug $service color_only) ($pid) will not respawn"
+    unset BACKGROUND_PIDS[$service]
+    cleanup_service_files $service
+  fi
+
+}
+
+proc_exists() {
+  kill -0 $1 2>/dev/null
+}
+
 collect_childs() {
   declare -i pid
   pid=$1
@@ -159,4 +169,38 @@ collect_childs() {
     printf "%s\n" $child
     collect_childs $child;
   done
+}
+
+cleanup_service_files() {
+  local service_name=$(trim_string "$1")
+  rm -f runtime/envs/${service_name}
+  rm -f runtime/probes/http/${service_name}
+  rm -f runtime/probes/tcp/${service_name}
+  rm -f runtime/messages/${service_name}.*
+  return 0
+}
+
+http_probe() {
+  # http_probe hostname port path method expected_status_code
+  # Example: http_probe www.example.com 80 "/" GET 200
+  # Should be called with run_with_timeout to avoid long waits
+  [ ${#@} -ne 5 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  local host
+  local status_code
+  local method
+  local path
+  declare -i port
+  declare -i status_code
+  host=$(trim_string "$1")
+  port="$2"
+  path=$(trim_string "$3")
+  method=$(trim_string "$4")
+  status_code="$5"
+  [ $status_code -eq 0 ] && status_code=200
+  [ $port -eq 0 ] && port=80
+  exec 3<>/dev/tcp/${host}/${port}
+  printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
+  mapfile -t response <&3
+  regex_match "${response[0]}" "$(printf "HTTP/1.1 %s" "${status_code}")" && return 0
+  return 1
 }

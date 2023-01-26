@@ -16,4 +16,7 @@ python=(
   [probe]="http:example.com:81:/:GET:200"
   [success_exit]=0
   [probe_retries]=1
+  [http_probe_timeout]=1
+  [probe_failure_action]="restart"
+  [probe_interval]=1
 )

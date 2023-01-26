@@ -20,15 +20,6 @@ text() {
   }
 }
 
-cleanup_service_files() {
-  local service_name=$(trim_string "$1")
-  rm -f runtime/envs/${service_name}
-  rm -f runtime/probes/http/${service_name}
-  rm -f runtime/probes/tcp/${service_name}
-  rm -f runtime/messages/${service_name}.*
-  return 0
-}
-
 join_array() {
   # join $2 by $1
   local d=${1-} f=${2-}
@@ -61,31 +52,6 @@ trim_string() {
 
 regex_match() {
   [[ $1 =~ $2 ]]
-}
-
-http_probe() {
-  # http_probe hostname port path method expected_status_code
-  # Example: http_probe www.example.com 80 "/" GET 200
-  # Should be called with run_with_timeout to avoid long waits
-  [ ${#@} -ne 5 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
-  local host
-  local status_code
-  local method
-  local path
-  declare -i port
-  declare -i status_code
-  host=$(trim_string "$1")
-  port="$2"
-  path=$(trim_string "$3")
-  method=$(trim_string "$4")
-  status_code="$5"
-  [ $status_code -eq 0 ] && status_code=200
-  [ $port -eq 0 ] && port=80
-  exec 3<>/dev/tcp/${host}/${port}
-  printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
-  mapfile -t response <&3
-  regex_match "${response[0]}" "$(printf "HTTP/1.1 %s" "${status_code}")" && return 0
-  return 1
 }
 
 run_with_timeout () {
