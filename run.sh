@@ -2,7 +2,7 @@
 set -mb
 cd "$(dirname "$0")"
 
-declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_tries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
+declare -ar CONFIG_PARAMS=(system_packages http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config

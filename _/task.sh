@@ -1,39 +1,40 @@
 . $env_file
 . _/shared.sh
+
 # Do not allow for new process groups when running $command
 # This will prevent dedicated process groups and therefore zombie procs
 # Also disallow file globbing
 set -bf
 set +m
-#exec &> /dev/stdout 2>&1
 
 service_colored=$(text debug $service_name color_only)
 
-# Install additional packages
+# ~ Subroutine
+# Installation of additional system packages.
+# This code block will be run when bootstrapping the service container
+# and before launching the command.
+(
 mapfile -t packages < <(split "$system_packages" ",")
-[ ${#packages[@]} -ne 0 ] && {
-  # todo: read from proc
-  [[ $(id -u) -ne 0 ]] && {
-    text error "Cannot install packages for service $service_colored as non-root user"
-    cleanup_service_files ${service_name}
-    kill -TERM -$$
-  }
+if [ ${#packages[@]} -ne 0 ]; then
   text info "Installing additional system packages for service ${service_colored}: $(trim_all "${packages[@]}")"
   if command -v apk >/dev/null; then
-    apk --wait 30 add $(trim_all "${packages[@]}")
+    apk --wait 30 add $(trim_all "${packages[@]}"); exit $?
   elif command -v apt >/dev/null; then
-    apt install $(trim_all "${packages[@]}")
+    apt install $(trim_all "${packages[@]}"); exit $?
   else
-    text error "No comptaible package manager found to install packages for service $service_colored"
-    cleanup_service_files ${service_name}
-    kill -TERM -$$
+    text error "No supported package manager to install additional system packages"
+    exit 1
   fi
+fi
+)& wait $! || {
+  cleanup_service_files ${service_name}
+  kill -TERM -$$
 }
 
-# Run probes in background job
-# Wait for SIGRTMIN to launch
+# ~ Subroutine
+# Runs a probe in background job
+# Waits for SIGRTMIN to launch
 (
-  declare -i probe_counter=0
   [ ! -z "$probe" ] && {
     mapfile -t params < <(split "$probe" ":")
     probe_type=$(trim_string "${params[0]}")
@@ -44,16 +45,19 @@ mapfile -t packages < <(split "$system_packages" ",")
 
     trap -- "launched=1" SIGRTMIN
     echo -1 > runtime/probes/${probe_type}/${service_name}
+    declare -i probe_counter=0
+
     until [ -v launched ]; do
       sleep 1
     done
 
     text info "Service $service_colored probe (${probe_type}) is now being tried"
+
     while true; do
       if ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; then
         ((probe_counter++))
-        [ $probe_counter -le $probe_tries ] && {
-          text warning "Service $service_colored has a soft-failing HTTP probe (${probe_counter}/${probe_tries})"
+        [ $probe_counter -le $probe_retries ] && {
+          text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         } || {
           if [[ "$probe_failure_action" == "terminate" ]]; then
             text error "Service $service_colored terminates due to hard-failing HTTP probe"
