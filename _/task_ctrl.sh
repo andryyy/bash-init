@@ -16,8 +16,8 @@ start_probe_job() {
     sleep 1
   done
 
+  declare -i probe_counter=0
   if [[ $probe_type == "http" ]]; then
-    declare -i probe_counter=0
     text info "Service $service_colored probe (http) is now being tried"
     while true; do
       if ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; then
