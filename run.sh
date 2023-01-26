@@ -13,7 +13,7 @@ declare -A BACKGROUND_PIDS
 cleanup_bash_init
 
 trap "exit" INT TERM
-trap "finish" EXIT
+trap "exit_trap" EXIT
 
 check_defaults
 
@@ -22,14 +22,12 @@ check_defaults
   exit 1
 }
 
-exec {sleep_fd}<> <(:)
-
 text debug "Spawned bash-init with PID $$"
 
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
-    for raw_service in "${@}"; do
+    for raw_service in ${@}; do
       service="$(trim_string "$raw_service")"
       ! regex_match "$service" '^(#?([a-zA-Z0-9_]+))$' && {
         text error "Invalid service name: ${service}"
@@ -40,25 +38,25 @@ for i in {1..2}; do
   } || {
     # Now source services and process
     . services.array
-    for raw_service in "${@}"; do
+    for raw_service in ${@}; do
       service="$(trim_string "$raw_service")"
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
       text info "Starting: $(text debug $service color_only)"
-      > runtime/${service}.env
+      > runtime/envs/${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
         for attr in "${!s[@]}"; do
           [[ "$attr" == "$config" ]] && {
             user_config=1
-            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> runtime/${service}.env
+            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> runtime/envs/${service}
           }
         done
-        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/${service}.env
+        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/envs/${service}
       done
-      printf 'service_name="%s"\n' "$service" >> runtime/${service}.env
-      env_file=runtime/${service}.env bash _/task.sh &
+      printf 'service_name="%s"\n' "$service" >> runtime/envs/${service}
+      env_file=runtime/envs/${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
       text info "Spawned service container $(text debug $service color_only) with PID $pid, preparing environment..."
@@ -84,10 +82,10 @@ while true; do
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
     proc_exists $pid && {
-      [ $((run_loop%emit_stats_interval)) -eq 0 ] && emit_pid_stats $pid ||:
+      if [ $((run_loop%emit_stats_interval)) -eq 0 ]; then emit_pid_stats $pid; run_loop=0; fi
     } || {
-      [ -f runtime/${key}.env ] && {
-        env_file=runtime/${key}.env bash _/task.sh &
+      [ -f runtime/envs/${key} ] && {
+        env_file=runtime/envs/${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
         text warning "Restarting initialization of service container $(text debug $key color_only) with PID $_pid, starting command..."
@@ -102,5 +100,5 @@ while true; do
     }
   done
   [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }
-  read -t 1 -u $sleep_fd||:
+  sleep 1
 done

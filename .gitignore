@@ -1,4 +1,4 @@
-runtime/*.env
-runtime/terminate
+runtime/envs/*
+runtime/messages/*
 runtime/probes/http/*
 runtime/probes/tcp/*

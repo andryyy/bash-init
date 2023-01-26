@@ -22,9 +22,10 @@ text() {
 
 cleanup_service_files() {
   local service_name=$(trim_string "$1")
-  [ -f runtime/${service_name}.env ] && rm runtime/${service_name}.env
-  [ -f runtime/probes/http/${service_name} ] && rm runtime/probes/http/${service_name}
-  [ -f runtime/probes/tcp/${service_name} ] && rm runtime/probes/tcp/${service_name}
+  rm -f runtime/envs/${service_name}
+  rm -f runtime/probes/http/${service_name}
+  rm -f runtime/probes/tcp/${service_name}
+  rm -f runtime/messages/${service_name}.*
   return 0
 }
 
@@ -87,7 +88,6 @@ http_probe() {
   return 1
 }
 
-# https://stackoverflow.com/a/24413646
 run_with_timeout () {
   declare -i time=3
   regex_match "$1" "^[0-9]+$" && { time=$1; shift; }
@@ -95,7 +95,7 @@ run_with_timeout () {
     "$@" &
     child=$!
     (
-      read -rt $time <> <(:)||:
+      sleep $time
       kill $child 2> /dev/null
     ) &
     wait $child

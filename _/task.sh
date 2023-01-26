@@ -33,48 +33,48 @@ mapfile -t packages < <(split "$system_packages" ",")
 # Run probes in background job
 # Wait for SIGRTMIN to launch
 (
-declare -i probe_counter=0
-[ ! -z "$probe" ] && {
-  mapfile -t params < <(split "$probe" ":")
-  probe_type=$(trim_string "${params[0]}")
-  [[ "$probe_type" =~ http|tcp ]] || {
-    text info "Service $service_colored has invalid probe type definition: $probe_type"
-    exit 1
-  }
+  declare -i probe_counter=0
+  [ ! -z "$probe" ] && {
+    mapfile -t params < <(split "$probe" ":")
+    probe_type=$(trim_string "${params[0]}")
+    [[ "$probe_type" =~ http|tcp ]] || {
+      text info "Service $service_colored has invalid probe type definition: $probe_type"
+      exit 1
+    }
 
-  trap -- "launched=1" SIGRTMIN
-  echo 0 > runtime/probes/${probe_type}/${service_name}
-  until [ -v launched ]; do
-    read -rt 1 <> <(:)||:
-  done
-
-  text info "Service $service_colored probe (${probe_type}) is now being tried"
-  while true; do
-    while ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; do
-      ((probe_counter++))
-      [ $probe_counter -lt $probe_tries ] && {
-        text warning "Service $service_colored has a soft-failing HTTP probe (${probe_counter}/${probe_tries})"
-        read -rt $probe_counter <> <(:)||:
-      } || {
-        echo 0 > runtime/probes/${probe_type}/${service_name}
-        if [[ "$probe_failure_action" == "terminate" ]]; then
-          text error "Service $service_colored terminates due to hard-failing HTTP probe"
-          kill -TERM -$$
-        else
-          # Do not repeat
-          [ $probe_counter -lt $probe_tries ] || text error "Service $service_colored has a hard-failing HTTP probe"
-        fi
-      }
+    trap -- "launched=1" SIGRTMIN
+    echo -1 > runtime/probes/${probe_type}/${service_name}
+    until [ -v launched ]; do
+      sleep 1
     done
 
-    # Do not repeat
-    [ $(<runtime/probes/${probe_type}/${service_name}) -eq 0 ] && text success "HTTP probe for service $service_colored succeeded"
-    probe_counter=0
-    echo 1 > runtime/probes/${probe_type}/${service_name}
-    [ $continous_probe -eq 0 ] && break
-    read -rt $probe_interval <> <(:)||:
-  done
-}
+    text info "Service $service_colored probe (${probe_type}) is now being tried"
+    while true; do
+      if ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; then
+        ((probe_counter++))
+        [ $probe_counter -le $probe_tries ] && {
+          text warning "Service $service_colored has a soft-failing HTTP probe (${probe_counter}/${probe_tries})"
+        } || {
+          if [[ "$probe_failure_action" == "terminate" ]]; then
+            text error "Service $service_colored terminates due to hard-failing HTTP probe"
+            cleanup_service_files ${service_name}
+            kill -TERM -$$
+          else
+            [ $(<runtime/probes/${probe_type}/${service_name}) -ne 0 ] && \
+              text error "Service $service_colored has a hard-failing HTTP probe"
+            echo 0 > runtime/probes/${probe_type}/${service_name}
+          fi
+        }
+      else
+        probe_counter=0
+        [ $(<runtime/probes/${probe_type}/${service_name}) -ne 1 ] && \
+          text success "HTTP probe for service $service_colored succeeded"
+        echo 1 > runtime/probes/${probe_type}/${service_name}
+      fi
+      [ $continous_probe -eq 0 ] && break
+      sleep $probe_interval
+    done
+  }
 )&
 http_probe_pid=$!
 
@@ -96,9 +96,8 @@ command_exit_code=$?
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
 # Do nothing when bash-init is about to terminate
-[ -f runtime/terminate ] && {
+[ -f runtime/messages/${service_name}.terminate ] && {
   restart=""
-  text info "Service container of service $service_colored will now terminate"
 }
 
 # Check for success exit codes

@@ -13,6 +13,7 @@ python=(
   [command]="python3 -m http.server 8000"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
-  [probe]="http:example.com:80:/:GET:200"
+  [probe]="http:example.com:81:/:GET:200"
   [success_exit]=0
+  [probe_tries]=1
 )
