@@ -67,25 +67,29 @@ emit_pid_stats() {
     [[ ${rss[1]} =~ ([0-9]+) ]] && {
       memory_usage=$(( $memory_usage + "${BASH_REMATCH[1]}" ))
     }
-    child_names+=($(printf "%s[%d]" "$(</proc/$child/comm)" "$child"))
+    child_names+=($(printf '"%s[%d]"' "$(</proc/$child/comm)" "$child"))
   done
 
-  for health_probe in runtime/probes/{http,tcp}/${key}; do
-    [ -f $health_probe ] && {
-      health=$(<$health_probe);
-      [ $health -eq 1 ] && \
-        health="$(text success "OK" color_only)" || \
+  health="$(text debug "NA" color_only)"
+  if [ -f runtime/messages/${key}.probe_type ]; then
+    probe_type=$(<runtime/messages/${key}.probe_type)
+    if regex_match "$probe_type" "(http|tcp)" && [ -f runtime/probes/${probe_type}/${key} ]; then
+      health=$(<runtime/probes/${probe_type}/${key})
+      if [ $health -eq 1 ]; then
+        health="$(text success "OK" color_only)"
+      elif [ $health -eq 0 ]; then
         health="$(text error "BAD" color_only)"
-      break
-    }
-    health="$(text debug "NA" color_only)"
-  done
+      else
+        health="$(text warning "PENDING" color_only)"
+      fi
+    fi
+  fi
 
   text stats \
-    $(printf 'NAME:%s;MEMORY:%skB;CHILDS:%s;HEALTH:%s\n' \
+    $(printf '{"NAME":"%s","MEMORY":"%skB","CHILDS":[%s],"HEALTH":"%s"}\n' \
       "$(text debug "$key" color_only)" \
       "$(text debug "$memory_usage" color_only)" \
-      "$(text debug "$(join_array ";" "${child_names[@]}")" color_only)" \
+      "$(text debug "$(join_array "," "${child_names[@]}")" color_only)" \
       "$health"
     )
 }
@@ -99,14 +103,12 @@ stop_service() {
   declare -i await_exit
   declare -i pid
   declare -a pid_childs
-  declare -a stop_services
   declare -i pid=${BACKGROUND_PIDS[$service]}
 
   [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
-  regex_match "$policy" "(restart|stop)" || { text error "${FUNCNAME[0]}: Invalid policy"; return 1; }
+  regex_match "$policy" "(restart|stop|reload)" || { text error "${FUNCNAME[0]}: Invalid policy"; return 1; }
 
   [ $pid -ne 0 ] && while proc_exists $pid && [ $signal_retry -lt $kill_retries ]; do
-    echo 1 > runtime/messages/${service}.no_restart
     ((signal_retry++))
     pid_childs=$(collect_childs $pid)
 
@@ -199,8 +201,9 @@ http_probe() {
   [ $port -eq 0 ] && port=80
   exec 3<>/dev/tcp/${host}/${port}
   printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
-  mapfile -t response <&3
-  regex_match "${response[0]}" "$(printf "HTTP/1.[0-1] %s" "${status_code}")" && return 0
-  text error "Probe returned " "${response[0]}"
+  # Read only first line, timeout after 5s without response
+  read -u 3 -t 5 response
+  regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
+  text error "Unexpected response by probe $(join_array ":" "${@}") - $(text debug "$response" color_only)"
   return 1
 }

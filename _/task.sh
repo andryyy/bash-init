@@ -37,20 +37,35 @@ kill -STOP $$
 declare -i exit_ok=0
 mapfile -t expected_exits < <(split "$success_exit" ",")
 
-$command & pid=$!
-# Start probes
-[ -v probe_pid ] && {
-  kill -SIGRTMIN $probe_pid
-}
-# Wait for command
+if [ $probe_as_dependency -eq 1 ]; then
+  [ -v probe_pid ] && {
+    kill -SIGRTMIN $probe_pid
+  }
+  until [ -f runtime/messages/${service_name}.probe_type ]; do
+    sleep 0.1
+  done
+  probe_type=$(<runtime/messages/${service_name}.probe_type)
+  if regex_match "$probe_type" "(http|tcp)"; then
+    until [ -f runtime/probes/${probe_type}/${service_name} ] && [ $(<runtime/probes/${probe_type}/${service_name}) -eq 1 ]; do
+      text info "Service container $service_colored is awaiting healthy probe"
+      sleep 3
+    done
+  fi
+  $command & pid=$!
+else
+  $command & pid=$!
+  [ -v probe_pid ] && {
+    kill -SIGRTMIN $probe_pid
+  }
+fi
 wait -f $pid
 
 command_exit_code=$?
 [[ $command_exit_code -ge 128 ]] && \
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
-# Do nothing when bash-init is about to terminate
-[ -f runtime/messages/${service_name}.no_restart ] && {
+# Do nothing when bash-init is about to stop this service
+[ -f runtime/messages/${service_name}.stop ] && {
   restart=""
 }
 

@@ -9,7 +9,7 @@ start_probe_job() {
     kill -TERM -$$
   }
   trap -- "launched=1" SIGRTMIN
-  echo -1 > runtime/probes/http/${service_name}
+  echo -n -1 > runtime/probes/${probe_type}/${service_name}
 
   until [ -v launched ]; do
     sleep 1
@@ -18,9 +18,13 @@ start_probe_job() {
   declare -i probe_counter=0
   if [[ $probe_type == "http" ]]; then
     text info "Service $service_colored probe (http) is now being tried"
-    while true; do
-      if ! run_with_timeout $http_probe_timeout http_probe ${params[@]:1}; then
+    echo -n "http" > runtime/messages/${service_name}.probe_type
+
+    while [ ! -f runtime/messages/${service_name}.stop ]; do
+
+      if ! run_with_timeout $probe_timeout http_probe ${params[@]:1}; then
         ((probe_counter++))
+
         if [ $probe_counter -le $probe_retries ]; then
           text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
@@ -30,24 +34,26 @@ start_probe_job() {
             kill -TERM -$$
           elif [[ "$probe_failure_action" == "stop" ]]; then
             text error "Service $service_colored is queued to be stopped by failing HTTP probe"
-            echo stop > runtime/messages/${service_name}.stop
+            echo -n stop > runtime/messages/${service_name}.stop
           elif [[ "$probe_failure_action" == "restart" ]]; then
             text error "Service $service_colored is queued to be restarted by failing HTTP probe"
-            echo restart > runtime/messages/${service_name}.stop
+            echo -n restart > runtime/messages/${service_name}.stop
           else
             [ $(<runtime/probes/http/${service_name}) -ne 0 ] && \
               text error "Service $service_colored has a hard-failing HTTP probe"
-            echo 0 > runtime/probes/http/${service_name}
+            echo -n 0 > runtime/probes/http/${service_name}
           fi
         fi
       else
         probe_counter=0
         [ $(<runtime/probes/http/${service_name}) -ne 1 ] && \
           text success "HTTP probe for service $service_colored succeeded"
-        echo 1 > runtime/probes/http/${service_name}
+        echo -n 1 > runtime/probes/http/${service_name}
       fi
+
       [ $continous_probe -eq 0 ] && break
       sleep $probe_interval
+
     done
   fi
 }
@@ -90,6 +96,7 @@ install_packages() {
     if [ $py -eq 1 ]; then
       virtualenv --clear /virtualenvs/${service_name}
       source /virtualenvs/${service_name}/bin/activate
+      pip3 install --upgrade pip
       pip3 install $(trim_all "${py_pkgs[@]}")
     fi
   fi

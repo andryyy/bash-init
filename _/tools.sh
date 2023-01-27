@@ -6,7 +6,7 @@ text() {
   case "${1}" in
     info) s=INFO; c=96;;
     success) s=SUCCESS; c=32;;
-    warning) s=WARN; c=33;;
+    warning) s=WARN; c=93;;
     error) s=ERROR; c=31;;
     stats) s=STATS; c=35;;
     *) s=DEBUG; c=94;;
@@ -16,6 +16,7 @@ text() {
   [[ "${!#}" == "color_only" ]] && {
     printf "\e[%sm%s\e[0m\n" "$c" "${@:1:${#}-1}"
   } || {
+    printf '%(%c)T ' -1
     printf "\e[%sm%8s\e[0m %s\n" "$c" "$s" "$t"
   }
 }

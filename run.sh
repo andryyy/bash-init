@@ -2,7 +2,7 @@
 set -mb
 cd "$(dirname "$0")"
 
-declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait http_probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
+declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 . _/defaults.config
@@ -81,13 +81,11 @@ while true; do
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
     if proc_exists $pid; then
-      if [ $((run_loop%emit_stats_interval)) -eq 0 ]; then
+      [ $((run_loop%emit_stats_interval)) -eq 0 ] && {
         emit_pid_stats $pid
         run_loop=0
-      fi
-      if [ -f runtime/messages/${key}.stop ]; then
-        stop_service $key "$(<runtime/messages/${key}.stop)"
-      fi
+      }
+      [ -f runtime/messages/${key}.stop ] && stop_service $key "$(<runtime/messages/${key}.stop)"
     else
       if [ -f runtime/envs/${key} ]; then
         env_file=runtime/envs/${key} bash _/task.sh &
@@ -97,7 +95,7 @@ while true; do
         await_stop $_pid && {
           kill -CONT $_pid
           text success "Service container $(text debug $key color_only) was started"
-        } ||:
+        }
       else
         unset BACKGROUND_PIDS[$key]
         cleanup_service_files $key 1 1 1
