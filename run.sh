@@ -72,7 +72,6 @@ for key in "${!BACKGROUND_PIDS[@]}"; do
     text success "Service container $(text debug $key color_only) was initialized"
   else
     text error "Service container $(text debug $key color_only) could not be initialized"
-    #todo: optional unset BACKGROUND_PIDS[$key]
   fi
 done
 
@@ -87,7 +86,7 @@ while true; do
         run_loop=0
       fi
       if [ -f runtime/messages/${key}.stop ]; then
-        stop_service $key $(<runtime/messages/${key}.stop)
+        stop_service $key "$(<runtime/messages/${key}.stop)"
       fi
     else
       if [ -f runtime/envs/${key} ]; then
@@ -101,7 +100,7 @@ while true; do
         } ||:
       else
         unset BACKGROUND_PIDS[$key]
-        cleanup_service_files $key
+        cleanup_service_files $key 1 1 1
         text info "Service $key has left the chat"
       fi
     fi

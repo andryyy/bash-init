@@ -3,9 +3,8 @@
 . _/tools.sh
 . _/task_ctrl.sh
 
-# Cleanup previous messages
-# Do not run cleanup_service_files as it will wipe all service files
-rm -f runtime/messages/${service_name}.*
+# Cleanup probes and messages
+cleanup_service_files $service_name 0 1 1
 
 # Do not allow for new process groups when running $command
 # This will prevent dedicated process groups and therefore zombie procs
@@ -17,9 +16,11 @@ service_colored=$(text debug $service_name color_only)
 
 # Installation of additional system packages.
 install_packages ${service_name} || {
-  cleanup_service_files $service_name
+  cleanup_service_files $service_name 1 1 1
   kill -TERM -$$
 }
+[ -d ~/go/bin/ ] && PATH=${PATH}:~/go/bin
+[ -d /virtualenvs/${service_name}/bin ] && PATH=${PATH}:/virtualenvs/${service_name}/bin
 
 # ~ Subroutine
 # Runs a probe in background job
@@ -83,5 +84,5 @@ done
 }
 
 text info "Self-destroying service container (process group $$) of service $service_colored now"
-cleanup_service_files $service_name
+cleanup_service_files $service_name 1 1 1
 kill -TERM -$$

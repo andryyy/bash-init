@@ -6,7 +6,6 @@ start_probe_job() {
   probe_type=$(trim_string "${params[0]}")
   [[ "$probe_type" =~ http|tcp ]] || {
     text info "Service $service_colored has invalid probe type definition: $probe_type"
-    sleep 3
     kill -TERM -$$
   }
   trap -- "launched=1" SIGRTMIN
@@ -27,7 +26,7 @@ start_probe_job() {
         else
           if [[ "$probe_failure_action" == "terminate" ]]; then
             text error "Service $service_colored terminates due to hard-failing HTTP probe NOW"
-            cleanup_service_files ${service_name}
+            cleanup_service_files ${service_name} 1 1 1
             kill -TERM -$$
           elif [[ "$probe_failure_action" == "stop" ]]; then
             text error "Service $service_colored is queued to be stopped by failing HTTP probe"
@@ -56,16 +55,42 @@ start_probe_job() {
 install_packages() {
   mapfile -t packages < <(. runtime/envs/${service_name} && split "$system_packages" ",")
   regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
+  declare -i go=0 py=0
+  declare -a py_pkgs go_pkgs
 
   if [ ${#packages[@]} -ne 0 ]; then
-    text info "Installing additional system packages for service ${service_colored}: $(trim_all "${packages[@]}")"
+    for pkg in ${packages[@]}; do
+      mapfile -t types < <(split "$pkg" ":")
+      # Pathes may contain :, so ge 2 is fine
+      [ ${#types[@]} -ge 2 ] && {
+        [[ "${types[0]}" == "go" ]] && { go=1; go_pkgs+=("${types[@]:1}"); }
+        [[ "${types[0]}" == "py" ]] && { py=1; py_pkgs+=("${types[1]}"); }
+        packages=("${packages[@]/$pkg}")
+      }
+    done
+
+    text info "Installing additional system packages for service ${service_colored}"
     if command -v apk >/dev/null; then
+      [ $go -eq 1 ] && packages+=("go")
+      [ $py -eq 1 ] && packages+=("python3" "py3-pip" "py3-virtualenv")
       apk --wait $package_manager_lock_wait add $(trim_all "${packages[@]}")
     elif command -v apt >/dev/null; then
+      [ $go -eq 1 ] && packages+=("golang")
+      [ $py -eq 1 ] && packages+=("python3" "python3-pip" "python3-virtualenv")
       apt -o DPkg::Lock::Timeout=$package_manager_lock_wait install $(trim_all "${packages[@]}")
     else
       text error "No supported package manager to install additional system packages"
       return 1
+    fi
+
+    for go_pkg in ${go_pkgs[@]}; do
+      go install $go_pkg
+    done
+
+    if [ $py -eq 1 ]; then
+      virtualenv --clear /virtualenvs/${service_name}
+      source /virtualenvs/${service_name}/bin/activate
+      pip3 install $(trim_all "${py_pkgs[@]}")
     fi
   fi
 }

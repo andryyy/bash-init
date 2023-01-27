@@ -9,14 +9,26 @@ stress_ng=(
 )
 
 python=(
-  [system_packages]=python3
-  [command]="python3 -m http.server 8000"
+  [system_packages]=py:textual
+  [command]="python3 -m http.server 8080"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
-  [probe]="http:example.com:81:/:GET:200"
+  [probe]="http:example.com:80:/:GET:200"
   [success_exit]=0
   [probe_retries]=1
-  [http_probe_timeout]=1
+  [http_probe_timeout]=3
   [probe_failure_action]="restart"
   [probe_interval]=1
+)
+
+oneshot=(
+  [system_packages]=go:github.com/raphaelreyna/oneshot@latest
+  [command]="oneshot -u"
+  [restart]="always"
+  [stop_signal]=SIGTERM
+  [probe]="http:127.0.0.1:8080:/:GET:200"
+  [probe_retries]=3
+  [http_probe_timeout]=3
+  [probe_failure_action]="restart"
+  [probe_interval]=3
 )

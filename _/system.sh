@@ -149,8 +149,7 @@ stop_service() {
 
   if [[ "$policy" == "stop" ]]; then
     text info "Service container process group $(text debug $service color_only) ($pid) will not respawn"
-    unset BACKGROUND_PIDS[$service]
-    cleanup_service_files $service
+    cleanup_service_files $service 1 1 1
   fi
 
 }
@@ -172,11 +171,11 @@ collect_childs() {
 }
 
 cleanup_service_files() {
+  declare -i env=$2 probes=$3 messages=$4
   local service_name=$(trim_string "$1")
-  rm -f runtime/envs/${service_name}
-  rm -f runtime/probes/http/${service_name}
-  rm -f runtime/probes/tcp/${service_name}
-  rm -f runtime/messages/${service_name}.*
+  [ $env -eq 1 ] && rm -f runtime/envs/${service_name}
+  [ $probes -eq 1 ] && rm -f runtime/probes/http/${service_name} runtime/probes/tcp/${service_name}
+  [ $messages -eq 1 ] && rm -f runtime/messages/${service_name}.*
   return 0
 }
 
