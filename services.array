@@ -13,12 +13,12 @@ python=(
   [command]="python3 -m http.server 8080"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
-  [probe]="http:example.com:80:/:GET:200"
+  [probe]="http:127.0.0.1:8080:/:GET:200"
   [success_exit]=0
-  [probe_retries]=1
+  [probe_retries]=5
   [http_probe_timeout]=3
   [probe_failure_action]="restart"
-  [probe_interval]=1
+  [probe_interval]=5
 )
 
 oneshot=(

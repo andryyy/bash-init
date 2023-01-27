@@ -200,6 +200,7 @@ http_probe() {
   exec 3<>/dev/tcp/${host}/${port}
   printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
   mapfile -t response <&3
-  regex_match "${response[0]}" "$(printf "HTTP/1.1 %s" "${status_code}")" && return 0
+  regex_match "${response[0]}" "$(printf "HTTP/1.[0-1] %s" "${status_code}")" && return 0
+  text error "Probe returned " "${response[0]}"
   return 1
 }
