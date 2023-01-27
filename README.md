@@ -13,3 +13,4 @@ Documentation soon (tm).
 - Write tests
 - Do not use "text" in functions but use general lang files according to return codes
   - funcname[$return_code]="string"
+- Stats as JSON
