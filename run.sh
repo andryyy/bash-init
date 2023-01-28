@@ -43,7 +43,7 @@ for i in {1..2}; do
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
-      text info "Starting: $(text debug $service color_only)"
+      text info "[Stage 1/2] Starting: $(text debug $service color_only)"
       > runtime/envs/${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
@@ -59,20 +59,46 @@ for i in {1..2}; do
       env_file=runtime/envs/${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
-      text info "Spawned service container $(text debug $service color_only) with PID $pid, preparing environment..."
+      text info "[Stage 1/2] Spawned service container $(text debug $service color_only) with PID $pid"
     done
   }
 done
 
 declare -i pid
-for key in "${!BACKGROUND_PIDS[@]}"; do
-  pid=${BACKGROUND_PIDS[$key]}
-  if await_stop $pid; then
-    kill -CONT $pid
-    text success "Service container $(text debug $key color_only) was initialized"
-  else
-    text error "Service container $(text debug $key color_only) could not be initialized"
-  fi
+declare -A started_containers
+declare -a service_dependencies
+while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
+  for key in "${!BACKGROUND_PIDS[@]}"; do
+    mapfile -t service_dependencies < <(. runtime/envs/${key} ; split "$depends" ",")
+    for service_dependency in ${service_dependencies[@]}; do
+      declare -n "sd=$service_dependency"
+      if [ ${#sd[@]} -eq 0 ]; then
+        text error \
+        "Dependency $(text debug $service_dependency color_only) of service \
+        $(text debug $key color_only) is not a defined service"
+        exit 1
+      elif [ "$service_dependency" == "$key" ]; then
+        text error "Service $(text debug $key color_only) depends on itself"
+        exit 1
+      else
+        [ ${#started_containers[$service_dependency]} -eq 0 ] && {
+          text info "[Stage 2/2] Service $key is awaiting service dependency $service_dependency"
+          continue 2
+        }
+      fi
+    done
+    [ ${#started_containers[$key]} -eq 0 ] && {
+      pid=${BACKGROUND_PIDS[$key]}
+      if await_stop $pid; then
+        started_containers[$key]=1
+        kill -CONT $pid
+        text success "[Stage 2/2] Service container $(text debug $key color_only) was initialized"
+        sleep 3
+      else
+        text error "[Stage 2/2] Service container $(text debug $key color_only) could not be initialized"
+      fi
+    }
+  done
 done
 
 declare -i run_loop=0
@@ -91,7 +117,7 @@ while true; do
         env_file=runtime/envs/${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
-        text warning "Restarting initialization of service container $(text debug $key color_only) with PID $_pid, starting command..."
+        text warning "Restarting initialization of service container $(text debug $key color_only) with PID $_pid"
         await_stop $_pid && {
           kill -CONT $_pid
           text success "Service container $(text debug $key color_only) was started"

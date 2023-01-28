@@ -1,11 +1,24 @@
 stress_ng=(
   [system_packages]=stress-ng,procps,pstree
-  [command]="stress-ng --vm 1 --vm-bytes 512M --vm-hang 0"
+  [command]="stress-ng --vm 1 --vm-bytes 20M --vm-hang 0"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
   [probe]="http:debinux.de:80:/:GET:301"
   [success_exit]=0
   [probe_retries]=3
+  [depends]=
+  [probe_as_dependency]=0
+)
+
+stress_ng2=(
+  [system_packages]=stress-ng,procps,pstree
+  [command]="stress-ng --vm 1 --vm-bytes 10M --vm-hang 0"
+  [restart]="on-failure"
+  [stop_signal]=SIGTERM
+  [probe]="http:debinux.de:80:/:GET:301"
+  [success_exit]=0
+  [probe_retries]=3
+  [depends]=stress_ng
   [probe_as_dependency]=0
 )
 

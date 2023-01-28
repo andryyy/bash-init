@@ -38,3 +38,7 @@ The main process will pick up the file and read the stop_service policy.
 
   - Required content: http|tcp
 
+2. `$service.probe_state` - Sets the last probe state change to the current unix timestamp.
+
+  - Required content: unix timestamp
+
