@@ -68,3 +68,7 @@ run_with_timeout () {
     wait $child
   )
 }
+
+regex() {
+  [[ $1 =~ $2 ]] && printf '%s\n' "${BASH_REMATCH[1]}"
+}

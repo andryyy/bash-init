@@ -37,7 +37,7 @@ await_stop() {
   declare -i pid
   pid=$1
   while proc_exists $pid; do
-    regex_match "$(</proc/$pid/status)" 'State:\sT\s' && return 0
+    [[ "$(proc_status $pid State)" == "T (stopped)" ]] && return 0
     sleep 0.1
   done
   return 1
@@ -206,4 +206,13 @@ http_probe() {
   regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
   text error "Unexpected response by probe $(join_array ":" "${@}") - $(text debug "$response" color_only)"
   return 1
+}
+
+proc_status() {
+  declare -a pid=$1
+  local attr=$(trim_string "$2")
+  mapfile -t proc_status </proc/${pid}/task/${pid}/status
+  for line in "${proc_status[@]}"; do
+    regex "$line" "$(printf '%s:\s(.*)$' $attr)"
+  done
 }
