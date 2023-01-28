@@ -19,13 +19,13 @@ Documentation soon (tm).
 
 ## Service messages
 
-Location: `runtime/messages`
+**Location**: `runtime/messages`
 
 Contains files in the format of `$service.$action`.
 
 A service message file may contain information to be used when picked up by the main process.
 
-1. `$service.stop` - Indicates a service should be stopped or restarted.
+**1\.** `$service.stop` - Indicates a service should be stopped or restarted.
 
 A service container will not read the content but skip any self-controlled restart mechanisms when the message file exists.
 This prevents the service from restarting automatically when it is sent a stop signal by the parent PID.
@@ -34,11 +34,11 @@ The main process will pick up the file and read the stop_service policy.
 
   - Required content: stop|restart|reload
 
-2. `$service.probe_type` - Sets the currently active probe type for a service.
+**2\.** `$service.probe_type` - Sets the currently active probe type for a service.
 
   - Required content: http|tcp
 
-2. `$service.probe_state` - Sets the last probe state change to the current unix timestamp.
+**3\.** `$service.probe_state` - Sets the last probe state change to the current unix timestamp.
 
   - Required content: unix timestamp
 
