@@ -27,10 +27,9 @@ A service message file may contain information to be used when picked up by the 
 
 **1\.** `$service.stop` - Indicates a service should be stopped or restarted.
 
-A service container will not read the content but skip any self-controlled restart mechanisms when the message file exists.
+  - A service container will not read the content but skip any self-controlled restart mechanisms when the message file exists.
 This prevents the service from restarting automatically when it is sent a stop signal by the parent PID.
-
-The main process will pick up the file and read the stop_service policy.
+The _main process_ will pick up the file and read the stop_service policy.
 
   - Required content: stop|restart|reload
 
