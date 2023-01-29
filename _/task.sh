@@ -41,12 +41,12 @@ if [ $probe_as_dependency -eq 1 ]; then
   [ -v probe_pid ] && {
     kill -SIGRTMIN $probe_pid
   }
-  until [ -f runtime/messages/${service_name}.probe_type ]; do
+  until [ -s runtime/messages/${service_name}.probe_type ]; do
     sleep 0.1
   done
   probe_type=$(<runtime/messages/${service_name}.probe_type)
-  if regex_match "$probe_type" "(http|tcp)"; then
-    until [ -f runtime/probes/${probe_type}/${service_name} ] && [ $(<runtime/probes/${probe_type}/${service_name}) -eq 1 ]; do
+  if is_regex_match "$probe_type" "(http|tcp)"; then
+    until [ -s runtime/probes/${probe_type}/${service_name} ] && [ $(<runtime/probes/${probe_type}/${service_name}) -eq 1 ]; do
       text info "Service container $service_colored is awaiting healthy probe"
       sleep 3
     done
@@ -58,6 +58,8 @@ else
     kill -SIGRTMIN $probe_pid
   }
 fi
+printf $pid > runtime/messages/${service_name}.command_pid
+text success "[Stage 3/3] Service container $service_colored started command with PID $pid"
 wait -f $pid
 
 command_exit_code=$?
@@ -65,13 +67,13 @@ command_exit_code=$?
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
 # Do nothing when bash-init is about to stop this service
-[ -f runtime/messages/${service_name}.stop ] && {
+[ -s runtime/messages/${service_name}.stop ] && {
   restart=""
 }
 
 # Check for success exit codes
 for e in ${expected_exits[@]}; do
-  regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
+  is_regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
 done
 
 # The command was executed, check how to handle restarts

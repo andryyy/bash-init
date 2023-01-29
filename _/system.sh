@@ -25,6 +25,7 @@ exit_trap(){
     stop_service $service stop &
   done
   text info "Waiting for shutdown jobs to complete"
+  kill ${channel_PID}
   wait
   cleanup_bash_init
   text success "Done"
@@ -71,9 +72,9 @@ emit_pid_stats() {
   done
 
   health="$(text debug "NA" color_only)"
-  if [ -f runtime/messages/${key}.probe_type ]; then
+  if [ -s runtime/messages/${key}.probe_type ]; then
     probe_type=$(<runtime/messages/${key}.probe_type)
-    if regex_match "$probe_type" "(http|tcp)" && [ -f runtime/probes/${probe_type}/${key} ]; then
+    if is_regex_match "$probe_type" "(http|tcp)" && [ -s runtime/probes/${probe_type}/${key} ]; then
       health=$(<runtime/probes/${probe_type}/${key})
       if [ $health -eq 1 ]; then
         health="$(text success "OK" color_only)"
@@ -95,9 +96,9 @@ emit_pid_stats() {
 }
 
 stop_service() {
-  # Policy can be stop or restart
   local service=$(trim_string "$1")
   local policy=$(trim_string "$2")
+  local command_pid
   declare -i signal_retry=0
   declare -i kill_retry
   declare -i await_exit
@@ -106,13 +107,25 @@ stop_service() {
   declare -i pid=${BACKGROUND_PIDS[$service]}
 
   [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
-  regex_match "$policy" "(restart|stop|reload)" || { text error "${FUNCNAME[0]}: Invalid policy"; return 1; }
+  is_regex_match "$policy" "(restart|stop|reload)" || { text error "${FUNCNAME[0]}: Invalid policy"; return 1; }
 
   [ $pid -ne 0 ] && while proc_exists $pid && [ $signal_retry -lt $kill_retries ]; do
     ((signal_retry++))
     pid_childs=$(collect_childs $pid)
 
-    while read signal; do
+    if [[ "$policy" == "reload" ]]; then
+      signals=$reload_signal
+    else
+      signals=$(. runtime/envs/${service} ; split "$stop_signal" ",")
+    fi
+    for signal in ${signals[@]}; do
+      if [[ "$policy" == "reload" ]]; then
+        command_pid=$(<runtime/messages/${service}.command_pid)
+        kill -${signal} ${command_pid} 2>/dev/null
+        text info "Sent command PID $command_pid of container $(text debug $service color_only) ($pid) reload signal $signal"
+        >runtime/messages/${service}.stop
+        return 0
+      fi
       kill_retry=0
       while [ $kill_retry -lt $kill_retries ] && proc_exists -$pid; do
         ((kill_retry++))
@@ -131,8 +144,7 @@ stop_service() {
           break
         fi
       done
-    done < <(. runtime/envs/${service} ; split "$stop_signal" ",")
-
+    done
     for child in ${pid_childs[@]}; do
       proc_exists $child && {
         text warning "Child process $child from service container $(text debug $service color_only) ($pid) did not exit, terminating"
@@ -141,10 +153,9 @@ stop_service() {
         text success "Child process $child from service container $(text debug $service color_only) is gone"
       }
     done
-
   done
 
-  proc_exists -$pid && {
+  [[ "$policy" != "reload" ]] && proc_exists -$pid && {
     text warning "Service container process group $(text debug $service color_only) ($pid) did not exit, terminating"
     kill -9 -$pid
   }
@@ -203,8 +214,8 @@ http_probe() {
   printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
   # Read only first line, timeout after 5s without response
   read -u 3 -t 5 response
-  regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
-  text error "Unexpected response by probe $(join_array ":" "${@}") - $(text debug "$response" color_only)"
+  is_regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
+  text debug "Unexpected response by probe $(join_array ":" "${@}") - $(text debug "$response" color_only)"
   return 1
 }
 
@@ -213,6 +224,6 @@ proc_status() {
   local attr=$(trim_string "$2")
   mapfile -t proc_status </proc/${pid}/task/${pid}/status
   for line in "${proc_status[@]}"; do
-    regex "$line" "$(printf '%s:\s(.*)$' $attr)"
+    print_regex_match "$line" "$(printf '%s:\s(.*)$' $attr)"
   done
 }

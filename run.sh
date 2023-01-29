@@ -9,6 +9,7 @@ declare -A BACKGROUND_PIDS
 . _/bash-init.config
 . _/system.sh
 . _/tools.sh
+. _/com_chan.sh
 
 cleanup_bash_init
 
@@ -24,12 +25,14 @@ check_defaults
 
 text debug "Spawned bash-init with PID $$"
 
+create_com_chan
+
 for i in {1..2}; do
   # On first loop, declare associative arrays
   [ $i -eq 1 ] && {
     for raw_service in ${@}; do
       service="$(trim_string "$raw_service")"
-      ! regex_match "$service" '^(#?([a-zA-Z0-9_]+))$' && {
+      ! is_regex_match "$service" '^[a-zA-Z0-9_]+$' && {
         text error "Invalid service name: ${service}"
         exit 1
       }
@@ -43,7 +46,7 @@ for i in {1..2}; do
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
-      text info "[Stage 1/2] Starting: $(text debug $service color_only)"
+      text info "[Stage 1/3] Starting: $(text debug $service color_only)"
       > runtime/envs/${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
@@ -56,10 +59,10 @@ for i in {1..2}; do
         [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/envs/${service}
       done
       printf 'service_name="%s"\n' "$service" >> runtime/envs/${service}
-      env_file=runtime/envs/${service} bash _/task.sh &
+      comm_chan=$comm_chan env_file=runtime/envs/${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
-      text info "[Stage 1/2] Spawned service container $(text debug $service color_only) with PID $pid"
+      text success "[Stage 1/3] Spawned service container $(text debug $service color_only) with PID $pid"
     done
   }
 done
@@ -82,7 +85,7 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         exit 1
       else
         [ ${#started_containers[$service_dependency]} -eq 0 ] && {
-          text info "[Stage 2/2] Service $key is awaiting service dependency $service_dependency"
+          text info "[Stage 2/3] Service $key is awaiting service dependency $service_dependency"
           continue 2
         }
       fi
@@ -92,10 +95,10 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
       if await_stop $pid; then
         started_containers[$key]=1
         kill -CONT $pid
-        text success "[Stage 2/2] Service container $(text debug $key color_only) was initialized"
+        text success "[Stage 2/3] Service container $(text debug $key color_only) was initialized"
         sleep 3
       else
-        text error "[Stage 2/2] Service container $(text debug $key color_only) could not be initialized"
+        text error "[Stage 2/3] Service container $(text debug $key color_only) could not be initialized"
       fi
     }
   done
@@ -111,9 +114,9 @@ while true; do
         emit_pid_stats $pid
         run_loop=0
       }
-      [ -f runtime/messages/${key}.stop ] && stop_service $key "$(<runtime/messages/${key}.stop)"
+      [ -s runtime/messages/${key}.stop ] && stop_service $key "$(<runtime/messages/${key}.stop)"
     else
-      if [ -f runtime/envs/${key} ]; then
+      if [ -s runtime/envs/${key} ]; then
         env_file=runtime/envs/${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid

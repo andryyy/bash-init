@@ -9,6 +9,9 @@ start_probe_job() {
     kill -TERM -$$
   }
   trap -- "launched=1" SIGRTMIN
+
+  printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "2" > $comm_chan
+
   printf "2" > runtime/probes/${probe_type}/${service_name}
   printf "%(%s)T" > runtime/messages/${service_name}.probe_state
 
@@ -21,14 +24,15 @@ start_probe_job() {
     text info "Service $service_colored probe (http) is now being tried"
     printf "http" > runtime/messages/${service_name}.probe_type
 
-    while [ ! -f runtime/messages/${service_name}.stop ]; do
+    while [ ! -s runtime/messages/${service_name}.stop ]; do
       if ! run_with_timeout $probe_timeout http_probe ${params[@]:1}; then
         ((probe_counter++))
 
         if [ $probe_counter -le $probe_retries ]; then
           text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
-          printf "0" > runtime/probes/http/${service_name}
+            printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "0" > $comm_chan
+            printf "0" > runtime/probes/http/${service_name}
           [ $(<runtime/probes/http/${service_name}) -ne 0 ] && {
             text error "Service $service_colored has a hard-failing HTTP probe"
             printf "%(%s)T" > runtime/messages/${service_name}.probe_state
@@ -39,6 +43,9 @@ start_probe_job() {
             kill -TERM -$$
           elif [[ "$probe_failure_action" == "stop" ]]; then
             printf "stop" > runtime/messages/${service_name}.stop
+          elif [[ "$probe_failure_action" == "reload" ]]; then
+            probe_counter=0
+            printf "reload" > runtime/messages/${service_name}.stop
           elif [[ "$probe_failure_action" == "restart" ]]; then
             printf "restart" > runtime/messages/${service_name}.stop
           fi
@@ -49,6 +56,7 @@ start_probe_job() {
           text success "HTTP probe for service $service_colored succeeded"
           printf "%(%s)T" > runtime/messages/${service_name}.probe_state
         }
+        printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "1" > $comm_chan
         printf "1" > runtime/probes/http/${service_name}
       fi
       [ $continous_probe -eq 0 ] && break
@@ -59,7 +67,7 @@ start_probe_job() {
 
 install_packages() {
   mapfile -t packages < <(. runtime/envs/${service_name} && split "$system_packages" ",")
-  regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
+  is_regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
   declare -i go=0 py=0
   declare -a py_pkgs go_pkgs
 

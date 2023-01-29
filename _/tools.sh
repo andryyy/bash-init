@@ -51,13 +51,13 @@ trim_string() {
   printf '%s' "$_"
 }
 
-regex_match() {
+is_regex_match() {
   [[ $1 =~ $2 ]]
 }
 
 run_with_timeout () {
   declare -i time=3
-  regex_match "$1" "^[0-9]+$" && { time=$1; shift; }
+  is_regex_match "$1" "^[0-9]+$" && { time=$1; shift; }
   (
     "$@" &
     child=$!
@@ -69,6 +69,6 @@ run_with_timeout () {
   )
 }
 
-regex() {
+print_regex_match() {
   [[ $1 =~ $2 ]] && printf '%s\n' "${BASH_REMATCH[1]}"
 }

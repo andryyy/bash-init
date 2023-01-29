@@ -33,11 +33,15 @@ The _main process_ will pick up the file and read the stop_service policy.
 
 - Required content: stop|restart|reload
 
-**2\.** `$service.probe_type` - Sets the currently active probe type for a service.
+**2\.** `$service.probe_type` - Contains the currently active probe type for a service.
 
 - Required content: http|tcp
 
-**3\.** `$service.probe_state` - Sets the last probe state change to the current unix timestamp.
+**3\.** `$service.probe_state` - Contains the last probe state change to the current unix timestamp.
 
 - Required content: unix timestamp
+
+**4\.** `$service.command_pid` - Contains the PID of the command inside a service container
+
+- Required content: pid
 
