@@ -10,10 +10,8 @@ start_probe_job() {
   }
   trap -- "launched=1" SIGRTMIN
 
-  printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "2" > $comm_chan
-
   printf "2" > runtime/probes/${probe_type}/${service_name}
-  printf "%(%s)T" > runtime/messages/${service_name}.probe_state
+  printf "%(%s)T" > runtime/messages/${service_name}.probe_change
 
   until [ -v launched ]; do
     sleep 1
@@ -24,39 +22,45 @@ start_probe_job() {
     text info "Service $service_colored probe (http) is now being tried"
     printf "http" > runtime/messages/${service_name}.probe_type
 
-    while [ ! -s runtime/messages/${service_name}.stop ]; do
+    while true; do
+
+      if [ -s runtime/messages/${service_name}.signal ]; then
+        sleep $probe_interval
+        continue
+      fi
+
       if ! run_with_timeout $probe_timeout http_probe ${params[@]:1}; then
         ((probe_counter++))
 
         if [ $probe_counter -le $probe_retries ]; then
           text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
-            printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "0" > $comm_chan
-            printf "0" > runtime/probes/http/${service_name}
           [ $(<runtime/probes/http/${service_name}) -ne 0 ] && {
             text error "Service $service_colored has a hard-failing HTTP probe"
-            printf "%(%s)T" > runtime/messages/${service_name}.probe_state
+            printf "%(%s)T" > runtime/messages/${service_name}.probe_change
           }
+          printf "0" > runtime/probes/http/${service_name}
 
           if [[ "$probe_failure_action" == "terminate" ]]; then
             cleanup_service_files ${service_name} 1 1 1
             kill -TERM -$$
           elif [[ "$probe_failure_action" == "stop" ]]; then
-            printf "stop" > runtime/messages/${service_name}.stop
+            printf "stop" > runtime/messages/${service_name}.signal
+            return
           elif [[ "$probe_failure_action" == "reload" ]]; then
+            printf "reload" > runtime/messages/${service_name}.signal
             probe_counter=0
-            printf "reload" > runtime/messages/${service_name}.stop
           elif [[ "$probe_failure_action" == "restart" ]]; then
-            printf "restart" > runtime/messages/${service_name}.stop
+            printf "restart" > runtime/messages/${service_name}.signal
+            return
           fi
         fi
       else
         probe_counter=0
         [ $(<runtime/probes/http/${service_name}) -ne 1 ] && {
           text success "HTTP probe for service $service_colored succeeded"
-          printf "%(%s)T" > runtime/messages/${service_name}.probe_state
+          printf "%(%s)T" > runtime/messages/${service_name}.probe_change
         }
-        printf '%s:%s:%s:%(%s)T\n' "${probe_type}" "${service_name}" "1" > $comm_chan
         printf "1" > runtime/probes/http/${service_name}
       fi
       [ $continous_probe -eq 0 ] && break
@@ -65,7 +69,7 @@ start_probe_job() {
   fi
 }
 
-install_packages() {
+prepare_container() {
   mapfile -t packages < <(. runtime/envs/${service_name} && split "$system_packages" ",")
   is_regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
   declare -i go=0 py=0
@@ -104,7 +108,7 @@ install_packages() {
       virtualenv --clear /virtualenvs/${service_name}
       source /virtualenvs/${service_name}/bin/activate
       pip3 install --upgrade pip
-      pip3 install $(trim_all "${py_pkgs[@]}")
+      pip3 install --upgrade $(trim_all "${py_pkgs[@]}")
     fi
   fi
 }

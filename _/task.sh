@@ -15,12 +15,13 @@ set +m
 service_colored=$(text debug $service_name color_only)
 
 # Installation of additional system packages.
-install_packages ${service_name} || {
+prepare_container ${service_name} || {
   cleanup_service_files $service_name 1 1 1
   kill -TERM -$$
 }
 [ -d ~/go/bin/ ] && PATH=${PATH}:~/go/bin
-[ -d /virtualenvs/${service_name}/bin ] && PATH=${PATH}:/virtualenvs/${service_name}/bin
+# virtualenv is enabled in prepare_container, too
+[ -d /virtualenvs/${service_name}/bin ] && source /virtualenvs/${service_name}/bin/activate
 
 # ~ Subroutine
 # Runs a probe in background job
@@ -67,7 +68,7 @@ command_exit_code=$?
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
 # Do nothing when bash-init is about to stop this service
-[ -s runtime/messages/${service_name}.stop ] && {
+[ -s runtime/messages/${service_name}.signal ] && {
   restart=""
 }
 

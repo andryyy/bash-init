@@ -1,3 +1,17 @@
+granian=(
+  [system_packages]=py:granian
+  [command]="granian --host 0.0.0.0 --port 8080 --interface asgi /granian-app/main:app"
+  [restart]="on-failure"
+  [stop_signal]=SIGTERM
+  [probe]="http:127.0.0.1:8080:/:GET:200"
+  [success_exit]=0
+  [probe_retries]=5
+  [depends]=
+  [probe_as_dependency]=0
+  [probe_failure_action]=reload
+  [reload_signal]=SIGHUP
+)
+
 rspamd=(
   [system_packages]=rspamd,procps,pstree
   [command]="rspamd -f --insecure"
@@ -21,7 +35,10 @@ stress_ng=(
   [success_exit]=0
   [probe_retries]=3
   [depends]=
+  [probe_failure_action]=reload
+  [reload_signal]=0
   [probe_as_dependency]=0
+  [probe_interval]=2
 )
 
 python=(

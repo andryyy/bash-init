@@ -25,7 +25,6 @@ exit_trap(){
     stop_service $service stop &
   done
   text info "Waiting for shutdown jobs to complete"
-  kill ${channel_PID}
   wait
   cleanup_bash_init
   text success "Done"
@@ -114,16 +113,16 @@ stop_service() {
     pid_childs=$(collect_childs $pid)
 
     if [[ "$policy" == "reload" ]]; then
-      signals=$reload_signal
+      signals=$(. runtime/envs/${service} ; printf "$reload_signal")
     else
       signals=$(. runtime/envs/${service} ; split "$stop_signal" ",")
     fi
     for signal in ${signals[@]}; do
       if [[ "$policy" == "reload" ]]; then
-        command_pid=$(<runtime/messages/${service}.command_pid)
+        command_pid=$(proc_env $pid "command_pid")
         kill -${signal} ${command_pid} 2>/dev/null
         text info "Sent command PID $command_pid of container $(text debug $service color_only) ($pid) reload signal $signal"
-        >runtime/messages/${service}.stop
+        >runtime/messages/${service}.signal
         return 0
       fi
       kill_retry=0
@@ -220,10 +219,19 @@ http_probe() {
 }
 
 proc_status() {
-  declare -a pid=$1
+  declare -i pid=$1
   local attr=$(trim_string "$2")
   mapfile -t proc_status </proc/${pid}/task/${pid}/status
   for line in "${proc_status[@]}"; do
     print_regex_match "$line" "$(printf '%s:\s(.*)$' $attr)"
+  done
+}
+
+proc_env() {
+  declare -i pid=$1
+  local attr=$(trim_string "$2")
+  mapfile -d '' -t proc_env </proc/${pid}/environ
+  for line in "${proc_env[@]}"; do
+    print_regex_match "$line" "$(printf '%s=(.*)$' $attr)"
   done
 }

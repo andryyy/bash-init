@@ -9,7 +9,6 @@ declare -A BACKGROUND_PIDS
 . _/bash-init.config
 . _/system.sh
 . _/tools.sh
-. _/com_chan.sh
 
 cleanup_bash_init
 
@@ -24,8 +23,6 @@ check_defaults
 }
 
 text debug "Spawned bash-init with PID $$"
-
-create_com_chan
 
 for i in {1..2}; do
   # On first loop, declare associative arrays
@@ -59,7 +56,7 @@ for i in {1..2}; do
         [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/envs/${service}
       done
       printf 'service_name="%s"\n' "$service" >> runtime/envs/${service}
-      comm_chan=$comm_chan env_file=runtime/envs/${service} bash _/task.sh &
+      env_file=runtime/envs/${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
       text success "[Stage 1/3] Spawned service container $(text debug $service color_only) with PID $pid"
@@ -114,7 +111,7 @@ while true; do
         emit_pid_stats $pid
         run_loop=0
       }
-      [ -s runtime/messages/${key}.stop ] && stop_service $key "$(<runtime/messages/${key}.stop)"
+      [ -s runtime/messages/${key}.signal ] && stop_service $key "$(<runtime/messages/${key}.signal)"
     else
       if [ -s runtime/envs/${key} ]; then
         env_file=runtime/envs/${key} bash _/task.sh &
