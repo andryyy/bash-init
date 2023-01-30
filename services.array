@@ -1,6 +1,6 @@
 granian=(
   [system_packages]=py:granian
-  [command]="granian --host 0.0.0.0 --port 8080 --interface asgi /granian-app/main:app"
+  [command]="granian --host 0.0.0.0 --port 8080 --interface asgi /bash-init/apps/web:app"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
   [probe]="http:127.0.0.1:8080:/:GET:200"
