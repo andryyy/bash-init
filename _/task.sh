@@ -38,7 +38,7 @@ if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
   kill -SIGRTMIN $probe_pid
   until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
     text info "Service container $service_colored is awaiting healthy probe"
-    sleep 3
+    delay 3
   done
   $command & command_pid=$!
 else

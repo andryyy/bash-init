@@ -14,7 +14,7 @@ start_probe_job() {
   env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
 
   until [ -v launched ]; do
-    sleep 1
+    delay 1
   done
 
   declare -i probe_counter=0
@@ -24,7 +24,7 @@ start_probe_job() {
     while true; do
 
       if [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; then
-        sleep $probe_interval
+        delay $probe_interval
         continue
       fi
 
@@ -67,7 +67,7 @@ start_probe_job() {
         env_ctrl "$service_name" "set" "active_probe_status" "1"
       fi
       [ $continous_probe -eq 0 ] && break
-      sleep $probe_interval
+      delay $probe_interval
     done
   fi
 }

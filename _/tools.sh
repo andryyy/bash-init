@@ -62,11 +62,19 @@ run_with_timeout () {
     "$@" &
     child=$!
     (
-      sleep $time
+      delay $time
       kill $child 2> /dev/null
     ) &
     wait $child
   )
+}
+
+delay() {
+  declare -i i=$1
+  coproc {
+    read -n1 -s -t$i
+  }
+  wait $!
 }
 
 print_regex_match() {

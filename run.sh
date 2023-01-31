@@ -97,7 +97,7 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         started_containers[$key]=1
         kill -CONT $pid
         text success "[Stage 2/3] Service container $(text info $key color_only) was initialized"
-        sleep 3
+        delay 3
       else
         text error "[Stage 2/3] Service container $(text info $key color_only) could not be initialized"
       fi
@@ -140,5 +140,5 @@ while true; do
     fi
   done
   [ ${#BACKGROUND_PIDS[@]} -eq 0 ] && { text info "No more running services to monitor"; exit 0; }
-  sleep 1
+  delay 1
 done

@@ -36,7 +36,7 @@ await_stop() {
   pid=$1
   while proc_exists $pid; do
     [[ "$(proc_status $pid State)" == "T (stopped)" ]] && return 0
-    sleep 0.1
+    delay 1
   done
   return 1
 }
@@ -66,7 +66,11 @@ emit_service_stats() {
     [[ ${rss[1]} =~ ([0-9]+) ]] && {
       memory_usage=$(( $memory_usage + "${BASH_REMATCH[1]}" ))
     }
-    child_names+=($(printf '"%s[%d]"' "$(</proc/$child/comm)" "$child"))
+    if [ $emit_stats_proc_names -eq 1 ]; then
+      child_names+=($(printf '"%s[%d]"' "$(</proc/$child/comm)" "$child"))
+    else
+      child_names+=($(printf '%d' "$child"))
+    fi
   done
 
   health="$(text info "NA" color_only)"
@@ -83,12 +87,12 @@ emit_service_stats() {
   fi
 
   text stats \
-    $(printf '{"NAME":"%s","MEMORY":"%skB","CHILDS":[%s],"HEALTH":"%s"}\n' \
+    "$(printf '{"NAME":"%s","MEMORY":"%skB","CHILDS":[%s],"HEALTH":"%s"}' \
       "$(text info "$service" color_only)" \
       "$(text info "$memory_usage" color_only)" \
       "$(text info "$(join_array "," "${child_names[@]}")" color_only)" \
       "$health"
-    )
+    )"
 }
 
 stop_service() {
@@ -133,7 +137,7 @@ stop_service() {
             # Slow down
             await_exit=$((await_exit<=3?await_exit:await_exit*2))
             text info "Waiting ${await_exit}s for service container process group $(text info $service color_only) ($pid) to stop"
-            sleep $await_exit
+            delay $await_exit
           done
         else
           break
