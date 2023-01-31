@@ -26,16 +26,28 @@ rspamd=(
   [reload_signal]=SIGHUP
 )
 
+sleep=(
+  [command]="sleep 6000"
+  [restart]="on-failure"
+  [stop_signal]=SIGTERM
+  [probe]="http:debinux.de:80:/:GET:200"
+  [probe_retries]=5
+  [probe_failure_action]=restart
+  [reload_signal]=0
+  [probe_as_dependency]=0
+  [probe_interval]=1
+)
+
 stress_ng=(
   [system_packages]=stress-ng,procps,pstree
   [command]="stress-ng --vm 1 --vm-bytes 10M --vm-hang 0"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
-  [probe]="http:debinux.de:80:/:GET:301"
+  [probe]="http:debinux.de:80:/:GET:200"
   [success_exit]=0
   [probe_retries]=3
   [depends]=
-  [probe_failure_action]=reload
+  [probe_failure_action]=restart
   [reload_signal]=0
   [probe_as_dependency]=0
   [probe_interval]=2

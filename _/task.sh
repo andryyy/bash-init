@@ -3,20 +3,17 @@
 . _/tools.sh
 . _/task_ctrl.sh
 
-# Cleanup probes and messages
-cleanup_service_files $service_name 0 1 1
-
 # Do not allow for new process groups when running $command
 # This will prevent dedicated process groups and therefore zombie procs
 # Also disallow file globbing
 set -bf
 set +m
 
-service_colored=$(text debug $service_name color_only)
+service_colored=$(text info $service_name color_only)
 
 # Installation of additional system packages.
 prepare_container ${service_name} || {
-  cleanup_service_files $service_name 1 1 1
+  >/tmp/bash-init-svc_${service_name}
   kill -TERM -$$
 }
 [ -d ~/go/bin/ ] && PATH=${PATH}:~/go/bin
@@ -37,38 +34,33 @@ kill -STOP $$
 
 declare -i exit_ok=0
 mapfile -t expected_exits < <(split "$success_exit" ",")
-
-if [ $probe_as_dependency -eq 1 ]; then
-  [ -v probe_pid ] && {
-    kill -SIGRTMIN $probe_pid
-  }
-  until [ -s runtime/messages/${service_name}.probe_type ]; do
-    sleep 0.1
+if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
+  kill -SIGRTMIN $probe_pid
+  until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
+    text info "Service container $service_colored is awaiting healthy probe"
+    sleep 3
   done
-  probe_type=$(<runtime/messages/${service_name}.probe_type)
-  if is_regex_match "$probe_type" "(http|tcp)"; then
-    until [ -s runtime/probes/${probe_type}/${service_name} ] && [ $(<runtime/probes/${probe_type}/${service_name}) -eq 1 ]; do
-      text info "Service container $service_colored is awaiting healthy probe"
-      sleep 3
-    done
-  fi
-  $command & pid=$!
+  $command & command_pid=$!
 else
-  $command & pid=$!
+  $command & command_pid=$!
   [ -v probe_pid ] && {
     kill -SIGRTMIN $probe_pid
   }
 fi
-printf $pid > runtime/messages/${service_name}.command_pid
-text success "[Stage 3/3] Service container $service_colored started command with PID $pid"
-wait -f $pid
+
+env_ctrl "$service_name" "set" "command_pid" "$command_pid"
+env_ctrl "$service_name" "set" "container_pid" "$$"
+[ -v probe_pid ] && env_ctrl "$service_name" "set" "probe_pid" "$probe_pid"
+
+text success "[Stage 3/3] Service container $service_colored ($$) started command with PID $command_pid"
+wait -f $command_pid
 
 command_exit_code=$?
 [[ $command_exit_code -ge 128 ]] && \
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 
 # Do nothing when bash-init is about to stop this service
-[ -s runtime/messages/${service_name}.signal ] && {
+[ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ] && {
   restart=""
 }
 
@@ -102,5 +94,5 @@ done
 }
 
 text info "Self-destroying service container (process group $$) of service $service_colored now"
-cleanup_service_files $service_name 1 1 1
+>/tmp/bash-init-svc_${service_name}
 kill -TERM -$$

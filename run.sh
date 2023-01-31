@@ -5,6 +5,10 @@ cd "$(dirname "$0")"
 declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
+for parameter in ${@}; do
+  [[ "$parameter" =~ (-d|--debug) ]] && debug=1
+done
+
 . _/defaults.config
 . _/bash-init.config
 . _/system.sh
@@ -22,7 +26,7 @@ check_defaults
   exit 1
 }
 
-text debug "Spawned bash-init with PID $$"
+text info "Spawned bash-init with PID $$"
 
 for i in {1..2}; do
   # On first loop, declare associative arrays
@@ -43,23 +47,23 @@ for i in {1..2}; do
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
-      text info "[Stage 1/3] Starting: $(text debug $service color_only)"
-      > runtime/envs/${service}
+      text info "[Stage 1/3] Starting: $(text info $service color_only)"
+      > /tmp/bash-init-svc_${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
         for attr in "${!s[@]}"; do
           [[ "$attr" == "$config" ]] && {
             user_config=1
-            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> runtime/envs/${service}
+            printf '%s="%s"\n' "$attr" "${s[$attr]}" >> /tmp/bash-init-svc_${service}
           }
         done
-        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> runtime/envs/${service}
+        [ $user_config -eq 0 ] && printf '%s="%s"\n' "$config" "${!config}" >> /tmp/bash-init-svc_${service}
       done
-      printf 'service_name="%s"\n' "$service" >> runtime/envs/${service}
-      env_file=runtime/envs/${service} bash _/task.sh &
+      printf 'service_name="%s"\n' "$service" >> /tmp/bash-init-svc_${service}
+      env_file=/tmp/bash-init-svc_${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
-      text success "[Stage 1/3] Spawned service container $(text debug $service color_only) with PID $pid"
+      text success "[Stage 1/3] Spawned service container $(text info $service color_only) with PID $pid"
     done
   }
 done
@@ -69,16 +73,16 @@ declare -A started_containers
 declare -a service_dependencies
 while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
   for key in "${!BACKGROUND_PIDS[@]}"; do
-    mapfile -t service_dependencies < <(. runtime/envs/${key} ; split "$depends" ",")
+    mapfile -t service_dependencies < <(. /tmp/bash-init-svc_${key} ; split "$depends" ",")
     for service_dependency in ${service_dependencies[@]}; do
       declare -n "sd=$service_dependency"
       if [ ${#sd[@]} -eq 0 ]; then
         text error \
-        "Dependency $(text debug $service_dependency color_only) of service \
-        $(text debug $key color_only) is not a defined service"
+        "Dependency $(text info $service_dependency color_only) of service \
+        $(text info $key color_only) is not a defined service"
         exit 1
       elif [ "$service_dependency" == "$key" ]; then
-        text error "Service $(text debug $key color_only) depends on itself"
+        text error "Service $(text info $key color_only) depends on itself"
         exit 1
       else
         [ ${#started_containers[$service_dependency]} -eq 0 ] && {
@@ -92,10 +96,10 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
       if await_stop $pid; then
         started_containers[$key]=1
         kill -CONT $pid
-        text success "[Stage 2/3] Service container $(text debug $key color_only) was initialized"
+        text success "[Stage 2/3] Service container $(text info $key color_only) was initialized"
         sleep 3
       else
-        text error "[Stage 2/3] Service container $(text debug $key color_only) could not be initialized"
+        text error "[Stage 2/3] Service container $(text info $key color_only) could not be initialized"
       fi
     }
   done
@@ -106,25 +110,31 @@ while true; do
   ((run_loop++))
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    if proc_exists $pid; then
+    if proc_exists $pid && [ -s /tmp/bash-init-svc_${key} ]; then
       [ $((run_loop%emit_stats_interval)) -eq 0 ] && {
-        emit_pid_stats $pid
+        emit_service_stats $key
         run_loop=0
       }
-      [ -s runtime/messages/${key}.signal ] && stop_service $key "$(<runtime/messages/${key}.signal)"
+      pending_signal="$(env_ctrl "$key" "get" "pending_signal")"
+      if [ ! -z "$pending_signal" ]; then
+        env_ctrl "$key" "del" "pending_signal"
+        stop_service "$key" "$pending_signal"
+      fi
     else
-      if [ -s runtime/envs/${key} ]; then
-        env_file=runtime/envs/${key} bash _/task.sh &
+      if [ -s /tmp/bash-init-svc_${key} ]; then
+        env_file=/tmp/bash-init-svc_${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
-        text warning "Restarting initialization of service container $(text debug $key color_only) with PID $_pid"
+        text warning "Restarting initialization of service container $(text info $key color_only) with PID $_pid"
         await_stop $_pid && {
           kill -CONT $_pid
-          text success "Service container $(text debug $key color_only) was started"
+          text success "Service container $(text info $key color_only) was started"
         }
       else
         unset BACKGROUND_PIDS[$key]
-        cleanup_service_files $key 1 1 1
+        kill -$pid 2>/dev/null
+        kill $pid 2>/dev/null
+        >/tmp/bash-init-svc_${key}
         text info "Service $key has left the chat"
       fi
     fi

@@ -10,8 +10,8 @@ start_probe_job() {
   }
   trap -- "launched=1" SIGRTMIN
 
-  printf "2" > runtime/probes/${probe_type}/${service_name}
-  printf "%(%s)T" > runtime/messages/${service_name}.probe_change
+  env_ctrl "$service_name" "set" "active_probe_status" "2"
+  env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
 
   until [ -v launched ]; do
     sleep 1
@@ -20,11 +20,10 @@ start_probe_job() {
   declare -i probe_counter=0
   if [[ $probe_type == "http" ]]; then
     text info "Service $service_colored probe (http) is now being tried"
-    printf "http" > runtime/messages/${service_name}.probe_type
-
+    env_ctrl "$service_name" "set" "probe_type" "http"
     while true; do
 
-      if [ -s runtime/messages/${service_name}.signal ]; then
+      if [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; then
         sleep $probe_interval
         continue
       fi
@@ -35,33 +34,37 @@ start_probe_job() {
         if [ $probe_counter -le $probe_retries ]; then
           text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
-          [ $(<runtime/probes/http/${service_name}) -ne 0 ] && {
+          [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ] && {
             text error "Service $service_colored has a hard-failing HTTP probe"
-            printf "%(%s)T" > runtime/messages/${service_name}.probe_change
+            env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
           }
-          printf "0" > runtime/probes/http/${service_name}
+          env_ctrl "$service_name" "set" "active_probe_status" "0"
 
           if [[ "$probe_failure_action" == "terminate" ]]; then
-            cleanup_service_files ${service_name} 1 1 1
+            >/tmp/bash-init-svc_${service_name}
             kill -TERM -$$
+
           elif [[ "$probe_failure_action" == "stop" ]]; then
-            printf "stop" > runtime/messages/${service_name}.signal
+            env_ctrl "$service_name" "set" "pending_signal" "stop"
             return
+
           elif [[ "$probe_failure_action" == "reload" ]]; then
-            printf "reload" > runtime/messages/${service_name}.signal
+            env_ctrl "$service_name" "set" "pending_signal" "reload"
+            env_ctrl "$service_name" "set" "active_probe_status" "2"
             probe_counter=0
+
           elif [[ "$probe_failure_action" == "restart" ]]; then
-            printf "restart" > runtime/messages/${service_name}.signal
+            env_ctrl "$service_name" "set" "pending_signal" "restart"
             return
           fi
         fi
       else
         probe_counter=0
-        [ $(<runtime/probes/http/${service_name}) -ne 1 ] && {
+        [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ] && {
           text success "HTTP probe for service $service_colored succeeded"
-          printf "%(%s)T" > runtime/messages/${service_name}.probe_change
+          env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
         }
-        printf "1" > runtime/probes/http/${service_name}
+        env_ctrl "$service_name" "set" "active_probe_status" "1"
       fi
       [ $continous_probe -eq 0 ] && break
       sleep $probe_interval
@@ -70,7 +73,7 @@ start_probe_job() {
 }
 
 prepare_container() {
-  mapfile -t packages < <(. runtime/envs/${service_name} && split "$system_packages" ",")
+  mapfile -t packages < <(. /tmp/bash-init-svc_${service_name} && split "$system_packages" ",")
   is_regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
   declare -i go=0 py=0
   declare -a py_pkgs go_pkgs
