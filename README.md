@@ -6,7 +6,6 @@ Documentation soon (tm).
 
 **Todo**
 
-- Make use of DEBUG
 - Validate configuration
 - Detect dependency loops
 - Re-evaluate read as replacement for sleep (this does for some reason defunct bash while reading)

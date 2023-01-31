@@ -69,14 +69,14 @@ run_with_timeout () {
   )
 }
 
-delay() {
-  declare -i i=$1
+delay() (
+  declare i=$1
   coproc {
     read -n1 -s -t$i
   }
   wait $!
-}
+)
 
 print_regex_match() {
-  [[ $1 =~ $2 ]] && printf '%s\n' "${BASH_REMATCH[1]}"
+  [[ $1 =~ $2 ]] && printf '%s\n' "${BASH_REMATCH[1]}" || return 0
 }

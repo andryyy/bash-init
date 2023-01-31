@@ -1,4 +1,5 @@
 check_defaults() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   . _/defaults.config
   for config in ${CONFIG_PARAMS[@]}; do
     [[ "$config" == "command" ]] && continue
@@ -11,6 +12,7 @@ check_defaults() {
 }
 
 cleanup_bash_init() (
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   shopt -s nullglob
   for file in /tmp/bash-init-svc_*; do
     >"$file"
@@ -19,6 +21,7 @@ cleanup_bash_init() (
 )
 
 exit_trap(){
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   for service in ${!BACKGROUND_PIDS[@]}; do
     stop_service $service stop &
   done
@@ -30,6 +33,7 @@ exit_trap(){
 }
 
 await_stop() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   # Checks if the state of a PID is T (stopped)
   # declare inside a function automatically makes the variable local
   declare -i pid
@@ -42,6 +46,7 @@ await_stop() {
 }
 
 emit_service_stats() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   declare -i pid
   declare -i memory_usage
   declare -a child_names
@@ -96,6 +101,7 @@ emit_service_stats() {
 }
 
 stop_service() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   local service=$(trim_string "$1")
   local policy=$(trim_string "$2")
   local command_pid
@@ -167,10 +173,12 @@ stop_service() {
 }
 
 proc_exists() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   kill -0 $1 2>/dev/null
 }
 
 collect_childs() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   declare -i pid
   pid=$1
   [ $pid -eq 0 ] && return 1
@@ -183,6 +191,7 @@ collect_childs() {
 }
 
 http_probe() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   # http_probe hostname port path method expected_status_code
   # Example: http_probe www.example.com 80 "/" GET 200
   # Should be called with run_with_timeout to avoid long waits
@@ -210,6 +219,7 @@ http_probe() {
 }
 
 proc_status() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   declare -i pid=$1
   local attr=$(trim_string "$2")
   mapfile -t proc_status </proc/${pid}/task/${pid}/status
@@ -228,38 +238,61 @@ proc_status() {
 # Delete a value (and any previous value) of a service
 #   - env_ctrl del var_name
 #
-env_ctrl() (
+env_ctrl() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
   local service=$(trim_string "$1")
   local action=$(trim_string "$2")
   local var_name=$(trim_string "$3")
   local new_value=$(trim_string "$4")
-  local service_env
-  ([[ "$action" == "set" ]] && [ ${#@} -ne 4 ]) || \
-  ([[ "$action" != "set" ]] && [ ${#@} -ne 3 ]) && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  local service_env=
+
+  if [[ "$action" == "set" ]] && [ ${#@} -ne 4 ]; then
+    text error "${FUNCNAME[0]}: Invalid arguments"
+    return 1
+  elif [[ "$action" != "set" ]] && [ ${#@} -ne 3 ]; then
+    text error "${FUNCNAME[0]}: Invalid arguments"
+    return 1
+  fi
+
   [ -s /tmp/bash-init-svc_${service} ] || return 1
+
   mapfile -t service_env </tmp/bash-init-svc_${service}
 
+  # Be very sure to unlock
+  trap '>/tmp/env.lock' ERR
+
+  while [ -s /tmp/env.lock ]; do
+    delay 0.1
+  done
+
   if [[ "$action" == "get" ]]; then
+    printf "1" >/tmp/env.lock
     for line in "${service_env[@]}"; do
-      print_regex_match "$line" "^${var_name}=\"(.+)\"$"
+      if is_regex_match "$line" "^${var_name}="; then
+        print_regex_match "$line" "^${var_name}=\"(.+)\"$"
+      fi
     done
-
+    >/tmp/env.lock
   elif [[ "$action" == "prev" ]]; then
+    printf "1" >/tmp/env.lock
     for line in "${service_env[@]}"; do
-      print_regex_match "$line" "^_${var_name}=\"(.+)\"$"
+      if is_regex_match "$line" "^_${var_name}="; then
+        print_regex_match "$line" "^_${var_name}=\"(.+)\"$"
+      fi
     done
-
+    >/tmp/env.lock
   elif [[ "$action" == "set" ]]; then
     local old_value
     declare -i processed=0
-    old_value="$(env_ctrl "$service" "get" "$var_name")"
-
-    while [ -s /tmp/env.lock ]; do
-      continue
-    done
-    printf "1" > /tmp/env.lock
-
+    printf "1" >/tmp/env.lock
     >/tmp/bash-init-svc_${service}
+    # Cannot re-use self here as this would cause trouble with lock file
+    for line in "${service_env[@]}"; do
+      if is_regex_match "$line" "^${var_name}="; then
+        old_value=$(print_regex_match "$line" "^${var_name}=\"(.+)\"$")
+      fi
+    done
+
     for line in "${service_env[@]}"; do
       if is_regex_match "$line" "^_${var_name}="; then
         continue
@@ -272,17 +305,15 @@ env_ctrl() (
       fi
     done
 
-    [ $processed -eq 1 ] && \
-      printf '_%s="%s"\n' "${var_name}" "${old_value}" >> /tmp/bash-init-svc_${service} || \
+    if [ $processed -eq 1 ] && [ ! -z "$old_value" ]; then
+      printf '_%s="%s"\n' "${var_name}" "${old_value}" >> /tmp/bash-init-svc_${service}
+    else
       printf '%s="%s"\n' "${var_name}" "${new_value}" >> /tmp/bash-init-svc_${service}
+    fi
     >/tmp/env.lock
 
   elif [[ "$action" == "del" ]]; then
-    while [ -s /tmp/env.lock ]; do
-      continue
-    done
-    printf "1" > /tmp/env.lock
-
+    printf "1" >/tmp/env.lock
     >/tmp/bash-init-svc_${service}
     for line in "${service_env[@]}"; do
       if ! is_regex_match "$line" "^${var_name}="; then
@@ -293,4 +324,5 @@ env_ctrl() (
     done
     >/tmp/env.lock
   fi
-)
+  >/tmp/env.lock
+}

@@ -6,7 +6,12 @@ declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait probe_as_de
 declare -A BACKGROUND_PIDS
 
 for parameter in ${@}; do
-  [[ "$parameter" =~ (-d|--debug) ]] && debug=1
+  shift
+  if [[ "$parameter" =~ (-d|--debug) ]]; then
+    debug=1
+  else
+    set -- "$@" "$parameter"
+  fi
 done
 
 . _/defaults.config
@@ -110,7 +115,7 @@ while true; do
   ((run_loop++))
   for key in ${!BACKGROUND_PIDS[@]}; do
     pid=${BACKGROUND_PIDS[$key]}
-    if proc_exists $pid && [ -s /tmp/bash-init-svc_${key} ]; then
+    if proc_exists $pid; then
       [ $((run_loop%emit_stats_interval)) -eq 0 ] && {
         emit_service_stats $key
         run_loop=0
@@ -122,6 +127,9 @@ while true; do
       fi
     else
       if [ -s /tmp/bash-init-svc_${key} ]; then
+        while [ -s /tmp/env.lock ]; do
+          delay 0.1
+        done
         env_file=/tmp/bash-init-svc_${key} bash _/task.sh &
         _pid=$!
         BACKGROUND_PIDS[$key]=$_pid
