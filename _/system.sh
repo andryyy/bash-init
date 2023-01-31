@@ -10,7 +10,6 @@ check_defaults() {
   [[ -v has_missing ]] && exit 1
 }
 
-# Return 0 as the last rm command may return 1 on non-existing files
 cleanup_bash_init() (
   shopt -s nullglob
   for file in /tmp/bash-init-svc_*; do
