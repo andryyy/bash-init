@@ -122,7 +122,7 @@ while true; do
       }
       pending_signal="$(env_ctrl "$key" "get" "pending_signal")"
       if [ ! -z "$pending_signal" ]; then
-        env_ctrl "$key" "set" "pending_signal" ""
+        env_ctrl "$key" "del" "pending_signal"
         stop_service "$key" "$pending_signal"
       fi
     else

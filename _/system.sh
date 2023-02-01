@@ -287,24 +287,24 @@ env_ctrl() {
     shift 2
     for var_name in ${@}; do
       [[ "$action" == "prev" ]] && var_name="_${var_name}"
-      printf '%s\n' "$(. /tmp/bash-init-svc_${service} ; declare -n v=$var_name ; printf "$v")"
+      # Very important: Unset if previously existing
+      declare -n v=$var_name
+      [ -v v ] && unset ${!v}
+      printf '%s\n' "$(. /tmp/bash-init-svc_${service} ; printf "$v")"
     done
 
   elif [[ "$action" == "set" ]]; then
     declare -i processed=0
     local old_value=
-    local k= v=
     local var_name=$(trim_string "$3")
     local new_value=$(trim_string "$4")
+    declare -n ov=$var_name
 
     >/tmp/.bash-init-svc_${service}
 
     # Cannot re-use self here as this would cause trouble with lock file
-    for line in "${service_env[@]}"; do
-      IFS='=' read -r k v <<<${line}
-      [ "${k##\#*}" ] || continue
-      [[ "$k" == "$var_name" ]] && { eval old_value="$v"; break; }
-    done
+    [ -v ov ] && unset ${!ov}
+    old_value=$(printf '%s\n' "$(. /tmp/bash-init-svc_${service} ; printf "$ov")")
 
     for line in "${service_env[@]}"; do
       IFS='=' read -r k v <<<${line}
@@ -328,9 +328,20 @@ env_ctrl() {
       printf '%s="%s"\n' "${var_name}" "${new_value}" \
         >> /tmp/.bash-init-svc_${service}
     fi
-
     echo "$(</tmp/.bash-init-svc_${service})" >/tmp/bash-init-svc_${service}
 
+  elif [[ "$action" == "del" ]]; then
+    local var_name=$(trim_string "$3")
+
+    >/tmp/.bash-init-svc_${service}
+    for line in "${service_env[@]}"; do
+      IFS='=' read -r k v <<<${line}
+      [ "${k##\#*}" ] || continue;
+      [[ "$k" == "${var_name}" ]] && continue
+      printf '%s="%s"\n' "${k}" "$(eval k="$v"; printf '%s' "$k";)" \
+        >> /tmp/.bash-init-svc_${service}
+    done
+    echo "$(</tmp/.bash-init-svc_${service})" >/tmp/bash-init-svc_${service}
   fi
 
   >/tmp/env.lock
