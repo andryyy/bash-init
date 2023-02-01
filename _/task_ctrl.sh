@@ -82,7 +82,7 @@ prepare_container() {
   declare -i go=0 py=0
   declare -a py_pkgs go_pkgs
 
-  if [ ! -z "${packages[@]}" ]; then
+  if [ ! -z "${packages}" ]; then
     for pkg in ${packages[@]}; do
       mapfile -t types < <(split "$pkg" ":")
       # Pathes may contain :, so ge 2 is fine
