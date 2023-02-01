@@ -2,6 +2,8 @@
 # Functions will read from the given environment of the service container
 
 start_probe_job() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
+    with args $(join_array " " "${@}")"
   mapfile -t params < <(split "$probe" ":")
   probe_type=$(trim_string "${params[0]}")
   [[ "$probe_type" =~ http|tcp ]] || {
@@ -73,6 +75,8 @@ start_probe_job() {
 }
 
 prepare_container() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
+    with args $(join_array " " "${@}")"
   mapfile -t packages < <(. /tmp/bash-init-svc_${service_name} && split "$system_packages" ",")
   is_regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
   declare -i go=0 py=0
