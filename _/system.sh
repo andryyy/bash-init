@@ -252,9 +252,6 @@ proc_status() {
 # Set (or auto-update) a new value to an env var of a service
 #   - env_ctrl set var_name new_value
 #
-# Delete a value (and any previous value) of a service
-#   - env_ctrl del var_name
-#
 env_ctrl() {
   [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
     with args $(join_array " " "${@}")" >&2
@@ -334,18 +331,6 @@ env_ctrl() {
 
     echo "$(</tmp/.bash-init-svc_${service})" >/tmp/bash-init-svc_${service}
 
-  elif [[ "$action" == "del" ]]; then
-    local k= v=
-    local var_name=$(trim_string "$3")
-
-    >/tmp/bash-init-svc_${service}
-    for line in "${service_env[@]}"; do
-      IFS='=' read -r k v <<<${line}
-      [ "${k##\#*}" ] || continue;
-      [[ "$k" == "${var_name}" ]] && continue
-      printf '%s="%s"\n' "${k}" "$(eval k="$v"; printf '%s' "$k";)" \
-        >> /tmp/bash-init-svc_${service}
-    done
   fi
 
   >/tmp/env.lock
