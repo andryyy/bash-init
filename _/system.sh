@@ -149,6 +149,14 @@ stop_service() {
       kill_retry=0
       while [ $kill_retry -lt $kill_retries ] && proc_exists $pid; do
         ((kill_retry++))
+
+        # In case of premature interrupt:
+        if [[ "$(proc_status $pid State)" == "T (stopped)" ]]; then
+          text warning "Killing service container $(text info $service color_only) ($pid) while in stopped state"
+          kill -9 -$pid
+          continue
+        fi
+
         if kill -${signal} -${pid} 2>/dev/null; then
           text info "Sent service container process group $(text info $service color_only) ($pid) signal $signal (${kill_retry}/${kill_retries})"
           await_exit=0

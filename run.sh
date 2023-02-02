@@ -2,7 +2,7 @@
 set -mb
 cd "$(dirname "$0")"
 
-declare -ar CONFIG_PARAMS=(system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
+declare -ar CONFIG_PARAMS=(depends_grace_period system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 for parameter in ${@}; do
@@ -75,10 +75,12 @@ done
 
 declare -i pid
 declare -i health_check_loop=0
+declare -i stage_2_loop=0
 declare -A started_containers
 declare -a service_dependencies
 while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
   for key in "${!BACKGROUND_PIDS[@]}"; do
+    ((stage_2_loop++))
     mapfile -t service_dependencies < <(. /tmp/bash-init-svc_${key} ; split "$depends" ",")
     for service_dependency in ${service_dependencies[@]}; do
       declare -n "sd=$service_dependency"
@@ -92,14 +94,35 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         exit 1
       else
         if [ ${#started_containers[$service_dependency]} -eq 0 ]; then
-          text info "[Stage 2/3] Service $key is awaiting service dependency $service_dependency"
+          [ $((stage_2_loop%5)) -eq 0 ] && text info "[Stage 2/3] Service $(text info $key color_only) is awaiting service dependency $(text info $service_dependency color_only)"
           continue 2
         else
           if [ ! -z "$(env_ctrl "$service_dependency" "get" "probe")" ] && \
              [ "$(env_ctrl "$service_dependency" "get" "active_probe_status")" != "1" ]; then
+
+            declare -i depends_grace_period
+            depends_grace_period="$(env_ctrl "$service_dependency" "get" "depends_grace_period")"
             ((health_check_loop++))
-            text info "[Stage 2/3] Service $key is awaiting healthy state of service dependency $service_dependency"
-            [ $health_check_loop -gt 1 ] && delay 1
+
+            if [ $health_check_loop -gt $depends_grace_period ]; then
+              text error "[Stage 2/3] Service $(text info $key color_only) will be configured to self-destroy \
+                due to unhealthy dependency $(text info $service_dependency color_only)"
+
+              # Remove dependency to stop looping over it
+              env_ctrl "$key" "set" "depends" ""
+              # Set command to true, even though it should not be run due to stopped state
+              env_ctrl "$key" "set" "command" "true"
+              # Tell service container to self-destroy
+              env_ctrl "$key" "set" "pending_signal" "stop"
+              health_check_loop=0
+            fi
+
+            if [ $health_check_loop -gt 1 ]; then
+              [ $((health_check_loop%5)) -eq 0 ] && text info "[Stage 2/3] Service $(text info $key color_only) is awaiting \
+                healthy state of service dependency $(text info $service_dependency color_only), delaying"
+              delay 1
+            fi
+
             continue 2
           fi
         fi
@@ -114,6 +137,7 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         delay 3
       else
         text error "[Stage 2/3] Service container $(text info $key color_only) could not be initialized"
+        exit 1
       fi
     }
   done

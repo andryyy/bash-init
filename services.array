@@ -31,10 +31,10 @@ sleep=(
   [command]="sleep 6000"
   [restart]="on-failure"
   [stop_signal]=SIGTERM
-  [probe]="http:1.1.1.1:80:/:GET:301"
+  [probe]="http:1.1.1.1:80:/:GET:200"
   [probe_retries]=5
   [probe_failure_action]=reload
-  [probe_as_dependency]=0
+  [probe_as_dependency]=1
   [probe_interval]=10
 )
 

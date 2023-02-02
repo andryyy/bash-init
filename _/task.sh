@@ -28,14 +28,20 @@ if [ ! -z "$probe" ]; then
   probe_pid=$!
 fi
 
+# command_pid will be set in run_command function
+env_ctrl "$service_name" "set" "container_pid" "$$"
+[ ! -z "$probe" ] && env_ctrl "$service_name" "set" "probe_pid" "$probe_pid"
+
 # Waiting for launch command
 # This does also work when setting +m as we spawned this task in job control mode
+
 kill -STOP $$
 
 declare -i exit_ok=0
 mapfile -t expected_exits < <(split "$success_exit" ",")
 
-while :; do
+# We may have been configured to self-destroy in the time we slept (STOP)
+while [ -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; do
   start_time=$(printf "%(%s)T")
 
   run_command
@@ -64,7 +70,7 @@ while :; do
 done
 
 [[ $command_exit_code -ge 128 ]] && \
-  text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
+  text warning "Service $service_colored command received a signal ($((command_exit_code-128))) from outside our control"
 
 # Do nothing when bash-init is about to stop this service
 [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ] && {
