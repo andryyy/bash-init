@@ -70,6 +70,7 @@ run_with_timeout () {
 }
 
 delay() (
+  trap "kill ${COPROC_PID} 2>/dev/null" INT TERM
   declare i=$1
   coproc {
     read -n1 -s -t$i

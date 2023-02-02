@@ -34,28 +34,35 @@ kill -STOP $$
 
 declare -i exit_ok=0
 mapfile -t expected_exits < <(split "$success_exit" ",")
-if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
-  kill -SIGRTMIN $probe_pid
-  until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
-    text info "Service container $service_colored is awaiting healthy probe"
+
+while :; do
+  start_time=$(printf "%(%s)T")
+
+  run_command
+
+  if [[ -z "$periodic_interval" ]]; then
+    wait -f $command_pid
+    command_exit_code=$?
+    break
+  fi
+
+  until [ $(( $(printf "%(%s)T") - $start_time)) -ge $periodic_interval ]; do
+    if ! proc_exists $command_pid; then
+      text success "Service $service_colored periodic command did complete"
+      passed_time=$(( $(printf "%(%s)T") - $start_time))
+      delay $(( $periodic_interval - $passed_time ))
+      break
+    fi
     delay 1
   done
-  $command & command_pid=$!
-else
-  $command & command_pid=$!
-  [ -v probe_pid ] && {
-    kill -SIGRTMIN $probe_pid
-  }
-fi
+  if proc_exists $command_pid; then
+    text warning "Service $service_colored periodic command did not stop in time, queuing restart"
+    env_ctrl "$service_name" "set" "pending_signal" "restart"
+    delay 30
+  fi
 
-env_ctrl "$service_name" "set" "command_pid" "$command_pid"
-env_ctrl "$service_name" "set" "container_pid" "$$"
-[ -v probe_pid ] && env_ctrl "$service_name" "set" "probe_pid" "$probe_pid"
+done
 
-text success "[Stage 3/3] Service container $service_colored ($$) started command with PID $command_pid"
-wait -f $command_pid
-
-command_exit_code=$?
 [[ $command_exit_code -ge 128 ]] && \
   text warning "Service $service_colored received a signal ($((command_exit_code-128))) from outside our control"
 

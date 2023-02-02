@@ -302,8 +302,6 @@ env_ctrl() {
 
     >/tmp/.bash-init-svc_${service}
 
-    # Cannot re-use self here as this would cause trouble with lock file
-    [ -v ov ] && unset ${!ov}
     old_value=$(printf '%s\n' "$(. /tmp/bash-init-svc_${service} ; printf "$ov")")
 
     for line in "${service_env[@]}"; do

@@ -74,6 +74,7 @@ for i in {1..2}; do
 done
 
 declare -i pid
+declare -i health_check_loop=0
 declare -A started_containers
 declare -a service_dependencies
 while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
@@ -90,10 +91,18 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         text error "Service $(text info $key color_only) depends on itself"
         exit 1
       else
-        [ ${#started_containers[$service_dependency]} -eq 0 ] && {
+        if [ ${#started_containers[$service_dependency]} -eq 0 ]; then
           text info "[Stage 2/3] Service $key is awaiting service dependency $service_dependency"
           continue 2
-        }
+        else
+          if [ ! -z "$(env_ctrl "$service_dependency" "get" "probe")" ] && \
+             [ "$(env_ctrl "$service_dependency" "get" "active_probe_status")" != "1" ]; then
+            ((health_check_loop++))
+            text info "[Stage 2/3] Service $key is awaiting healthy state of service dependency $service_dependency"
+            [ $health_check_loop -gt 1 ] && delay 1
+            continue 2
+          fi
+        fi
       fi
     done
     [ ${#started_containers[$key]} -eq 0 ] && {

@@ -119,3 +119,26 @@ prepare_container() {
     fi
   fi
 }
+
+# Starts probe and runs command
+# Returns command_pid
+run_command() {
+  if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
+    kill -SIGRTMIN $probe_pid
+    until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
+      text info "Service container $service_colored is awaiting healthy probe to run command"
+      delay 1
+    done
+    $command & command_pid=$!
+  else
+    $command & command_pid=$!
+    [ -v probe_pid ] && {
+      kill -SIGRTMIN $probe_pid
+    }
+  fi
+  env_ctrl "$service_name" "set" "command_pid" "$command_pid"
+  env_ctrl "$service_name" "set" "container_pid" "$$"
+  [ -v probe_pid ] && env_ctrl "$service_name" "set" "probe_pid" "$probe_pid"
+
+  text success "[Stage 3/3] Service container $service_colored ($$) started command with PID $command_pid"
+}
