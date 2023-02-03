@@ -69,8 +69,8 @@ start_probe_job() {
         env_ctrl "$service_name" "set" "active_probe_status" "1"
       fi
       [ $continous_probe -eq 0 ] && break
-      delay $probe_interval
     done
+    delay 1
   fi
 }
 
@@ -131,7 +131,7 @@ run_command() {
     until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
       ((probe_status_loop++))
       [ $((probe_status_loop%3)) -eq 0 ] && \
-        text info "[Stage 3/3] Service container $service_colored is awaiting healthy probe to run command"
+        text info "$(stage_text stage_3) Service container $service_colored is awaiting healthy probe to run command"
       delay 1
     done
     $command & command_pid=$!
@@ -143,5 +143,5 @@ run_command() {
   fi
   env_ctrl "$service_name" "set" "command_pid" "$command_pid"
 
-  text success "[Stage 3/3] Service container $service_colored ($$) started command with PID $command_pid"
+  text success "$(stage_text stage_3) Service container $service_colored ($$) started command with PID $command_pid"
 }

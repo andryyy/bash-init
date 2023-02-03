@@ -21,6 +21,17 @@ text() {
   }
 }
 
+stage_text() {
+  [ ${#@} -ne 1 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  if [[ "$1" == "stage_1" ]]; then
+    printf "|\e[1;45;97m Sta\e[0;47;30mge 1/3 \e[0m|"
+  elif [[ "$1" == "stage_2" ]]; then
+    printf "|\e[1;45;97m Stage \e[0;47;30m2/3 \e[0m|"
+  elif [[ "$1" == "stage_3" ]]; then
+    printf "|\e[1;45;97m Stage 3/3 \e[0m|"
+  fi
+}
+
 join_array() {
   # join $2 by $1
   local d=${1-} f=${2-}

@@ -52,7 +52,7 @@ for i in {1..2}; do
       declare -n "s=$service"
       [ ${#s[@]} -eq 0 ] && { text error  "Service $service is not defined"; exit 1; }
       [ ${#s[command]} -eq 0 ] && { text error "Service $service has no command defined"; exit 1; }
-      text info "[Stage 1/3] Starting: $(text info $service color_only)"
+      text info "$(stage_text stage_1) Starting: $(text info $service color_only)"
       > /tmp/bash-init-svc_${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
@@ -68,7 +68,7 @@ for i in {1..2}; do
       env_file=/tmp/bash-init-svc_${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
-      text success "[Stage 1/3] Spawned service container $(text info $service color_only) with PID $pid"
+      text success "$(stage_text stage_1) Spawned service container $(text info $service color_only) with PID $pid"
     done
   }
 done
@@ -94,7 +94,7 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
         exit 1
       else
         if [ ${#started_containers[$service_dependency]} -eq 0 ]; then
-          [ $((stage_2_loop%5)) -eq 0 ] && text info "[Stage 2/3] Service $(text info $key color_only) is awaiting service dependency $(text info $service_dependency color_only)"
+          [ $((stage_2_loop%5)) -eq 0 ] && text info "$(stage_text stage_2) Service $(text info $key color_only) is awaiting service dependency $(text info $service_dependency color_only)"
           continue 2
         else
           if [ ! -z "$(env_ctrl "$service_dependency" "get" "probe")" ] && \
@@ -105,20 +105,18 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
             ((health_check_loop++))
 
             if [ $health_check_loop -gt $depends_grace_period ]; then
-              text error "[Stage 2/3] Service $(text info $key color_only) will be configured to self-destroy \
+              text error "$(stage_text stage_2) Service $(text info $key color_only) will be configured to self-destroy \
                 due to unhealthy dependency $(text info $service_dependency color_only)"
 
               # Remove dependency to stop looping over it
               env_ctrl "$key" "set" "depends" ""
-              # Set command to true, even though it should not be run due to stopped state
-              env_ctrl "$key" "set" "command" "true"
               # Tell service container to self-destroy
               env_ctrl "$key" "set" "pending_signal" "stop"
               health_check_loop=0
             fi
 
             if [ $health_check_loop -gt 1 ]; then
-              [ $((health_check_loop%5)) -eq 0 ] && text info "[Stage 2/3] Service $(text info $key color_only) is awaiting \
+              [ $((health_check_loop%5)) -eq 0 ] && text info "$(stage_text stage_2) Service $(text info $key color_only) is awaiting \
                 healthy state of service dependency $(text info $service_dependency color_only), delaying"
               delay 1
             fi
@@ -133,10 +131,10 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
       if await_stop $pid; then
         started_containers[$key]=1
         kill -CONT $pid
-        text success "[Stage 2/3] Service container $(text info $key color_only) was initialized"
+        text success "$(stage_text stage_2) Service container $(text info $key color_only) was initialized"
         delay 3
       else
-        text error "[Stage 2/3] Service container $(text info $key color_only) could not be initialized"
+        text error "$(stage_text stage_2) Service container $(text info $key color_only) could not be initialized"
         exit 1
       fi
     }

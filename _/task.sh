@@ -70,7 +70,8 @@ while [ -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; do
 done
 
 [[ $command_exit_code -ge 128 ]] && \
-  text warning "Service $service_colored command received a signal ($((command_exit_code-128))) from outside our control"
+  text warning "Service $service_colored command received a signal \
+    ($((command_exit_code-128))) from outside our control or terminated on a reload signal"
 
 # Do nothing when bash-init is about to stop this service
 [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ] && {
