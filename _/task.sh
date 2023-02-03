@@ -12,7 +12,7 @@ set +m
 service_colored=$(text info $service_name color_only)
 
 # Installation of additional system packages.
-prepare_container ${service_name} || {
+prepare_container "$service_name" || {
   >/tmp/bash-init-svc_${service_name}
   kill -TERM -$$
 }
@@ -34,7 +34,6 @@ env_ctrl "$service_name" "set" "container_pid" "$$"
 
 # Waiting for launch command
 # This does also work when setting +m as we spawned this task in job control mode
-
 kill -STOP $$
 
 declare -i exit_ok=0
@@ -46,7 +45,7 @@ while [ -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; do
 
   run_command
 
-  if [[ -z "$periodic_interval" ]]; then
+  if [ -z "$periodic_interval" ]; then
     wait -f $command_pid
     command_exit_code=$?
     break
@@ -55,16 +54,16 @@ while [ -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; do
   until [ $(( $(printf "%(%s)T") - $start_time)) -ge $periodic_interval ]; do
     if ! proc_exists $command_pid; then
       text success "Service $service_colored periodic command did complete"
-      passed_time=$(( $(printf "%(%s)T") - $start_time))
+      passed_time=$(( $(printf "%(%s)T") - $start_time ))
       delay $(( $periodic_interval - $passed_time ))
       break
     fi
     delay 1
   done
+
   if proc_exists $command_pid; then
     text warning "Service $service_colored periodic command did not stop in time, queuing restart"
     env_ctrl "$service_name" "set" "pending_signal" "restart"
-    delay 30
   fi
 
 done
@@ -73,40 +72,45 @@ done
   text warning "Service $service_colored command received a signal \
     ($((command_exit_code-128))) from outside our control or terminated on a reload signal"
 
-# Do nothing when bash-init is about to stop this service
-[ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ] && {
-  restart=""
-}
-
 # Check for success exit codes
 for e in ${expected_exits[@]}; do
   is_regex_match "$e" "^[0-9]+$" && [[ $command_exit_code -eq $e ]] && exit_ok=1
 done
 
-# The command was executed, check how to handle restarts
-# never
-[[ "$restart" == "never" ]] && {
-  [[ $exit_ok -eq 1 ]] && \
-    text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]" || \
-    text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
-}
+# Do nothing when bash-init decided for an action
+pending_signal="$(env_ctrl "$service_name" "get" "pending_signal")"
+if [ -z "$pending_signal" ]; then
 
-# always|periodic
-[[ "$restart" =~ always|periodic ]] && {
-  text info "Service $service_colored did exit with code $command_exit_code [restart=$restart]"
-  kill -TERM -$$
-}
+  if [[ "$restart" == "never" ]]; then
+    if [[ $exit_ok -eq 1 ]]; then
+      text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]"
+    else
+      text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
+    fi
+    env_ctrl "$service_name" "set" "pending_signal" "stop"
 
-# on-failure
-[[ "$restart" == "on-failure" ]] && {
-  [[ $exit_ok -eq 1 ]] && {
-    text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]"
-  } || {
-    text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
-    kill -TERM -$$
-  }
-}
+  elif [[ "$restart" == "always" ]]; then
+    text info "Service $service_colored did exit with code $command_exit_code [restart=$restart]"
+    env_ctrl "$service_name" "set" "pending_signal" "restart"
 
-text info "Self-destroying service container (process group $$) of service $service_colored now"
->/tmp/bash-init-svc_${service_name}
-kill -TERM -$$
+  elif [[ "$restart" == "on-failure" ]]; then
+    if [[ $exit_ok -eq 1 ]]; then
+      text info "Service $service_colored did exit expected (${command_exit_code}) [restart=$restart]"
+      env_ctrl "$service_name" "set" "pending_signal" "stop"
+    else
+      text warning "Service $service_colored did exit unexpected (${command_exit_code}) [restart=$restart]"
+      env_ctrl "$service_name" "set" "pending_signal" "restart"
+    fi
+
+  else
+    text info "Service $service_colored has no valid restart policy, stopping"
+    env_ctrl "$service_name" "set" "pending_signal" "stop"
+  fi
+
+else
+  text info "Pending signal for service $service_colored [pending_signal=$pending_signal] (process group $$)"
+fi
+
+text info "Awaiting signal execution for service container (process group $$) of service $service_colored"
+
+while :; do delay 1; done

@@ -2,7 +2,7 @@
 set -mb
 cd "$(dirname "$0")"
 
-declare -ar CONFIG_PARAMS=(depends_grace_period system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
+declare -ar CONFIG_PARAMS=(python_virtualenv_params depends_grace_period system_packages package_manager_lock_wait probe_as_dependency probe_timeout probe_retries restart periodic_interval success_exit probe depends stop_signal reload_signal command probe_interval continous_probe probe_failure_action)
 declare -A BACKGROUND_PIDS
 
 for parameter in ${@}; do

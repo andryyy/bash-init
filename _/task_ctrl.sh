@@ -26,8 +26,7 @@ start_probe_job() {
     while true; do
 
       if [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; then
-        delay $probe_interval
-        continue
+        return 1
       fi
 
       if ! run_with_timeout $probe_timeout http_probe ${params[@]:1}; then
@@ -69,8 +68,8 @@ start_probe_job() {
         env_ctrl "$service_name" "set" "active_probe_status" "1"
       fi
       [ $continous_probe -eq 0 ] && break
+      delay $probe_interval
     done
-    delay 1
   fi
 }
 
@@ -112,7 +111,7 @@ prepare_container() {
     done
 
     if [ $py -eq 1 ]; then
-      virtualenv --clear /virtualenvs/${service_name}
+      virtualenv ${python_virtualenv_clear} /virtualenvs/${service_name}
       source /virtualenvs/${service_name}/bin/activate
       pip3 install --upgrade pip
       pip3 install --upgrade $(trim_all "${py_pkgs[@]}")

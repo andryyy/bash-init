@@ -234,7 +234,7 @@ http_probe() {
   status_code="$5"
   [ $status_code -eq 0 ] && status_code=200
   [ $port -eq 0 ] && port=80
-  exec 3<>/dev/tcp/${host}/${port}
+  2>/dev/null exec 3<>/dev/tcp/${host}/${port} || return 1
   printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
   # Read only first line, timeout after 5s without response
   read -u 3 -t 5 response
