@@ -1,4 +1,4 @@
-![full_colored_dark | width=256](https://user-images.githubusercontent.com/2972950/216524472-0b9d50fb-6b36-41e2-8ce0-fa84a537fc45.svg)
+<img src="https://user-images.githubusercontent.com/2972950/216524472-0b9d50fb-6b36-41e2-8ce0-fa84a537fc45.svg" width="256">
 
 # bash-init
 
