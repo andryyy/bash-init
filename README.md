@@ -1,10 +1,12 @@
-<img src="https://user-images.githubusercontent.com/2972950/216524472-0b9d50fb-6b36-41e2-8ce0-fa84a537fc45.svg" width="256">
+![full_colored_dark | width=256](https://user-images.githubusercontent.com/2972950/216524472-0b9d50fb-6b36-41e2-8ce0-fa84a537fc45.svg)
 
 # bash-init
 
 Pure bash init system, a work in progress.
 
 No coreutils, just bash.
+
+![screenshot](https://user-images.githubusercontent.com/2972950/216527938-3cd07b6f-e9c5-4d9a-8176-04ef785babfd.png)
 
 - Dedicated process groups per service container for proper signal handling
   - Commands and jobs in containers will re-use the service containers process group
