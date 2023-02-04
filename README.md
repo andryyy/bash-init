@@ -35,9 +35,7 @@ Documentation soon. Really. I'm serious.
 - Validate configuration parameter types
 - CPU usage
   - Read CPU ticks in a fixed time frame and put it in reference to CONFIG_HZ
-- Detect dependency loops
 - Write tests
-- Allow custom headers for HTTP probes
 - Implement send/expect TCP probes
 - Write notifiers
 - Do not use "text" in functions but use general lang files according to return codes
