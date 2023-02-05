@@ -220,22 +220,28 @@ http_probe() {
   # http_probe hostname port path method expected_status_code
   # Example: http_probe www.example.com 80 "/" GET 200
   # Should be called with run_with_timeout to avoid long waits
-  [ ${#@} -ne 5 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  [ ${#@} -ne 6 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
   local host
   local status_code
   local method
   local path
   declare -i port
   declare -i status_code
+  declare -a headers
   host=$(trim_string "$1")
   port="$2"
   path=$(trim_string "$3")
   method=$(trim_string "$4")
   status_code="$5"
+  headers=$(trim_string "$6")
   [ $status_code -eq 0 ] && status_code=200
   [ $port -eq 0 ] && port=80
   2>/dev/null exec 3<>/dev/tcp/${host}/${port} || return 1
-  printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
+  if [ ! -z "$headers" ]; then
+    printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n%b\r\n\r\n" "$method" "$path" "$host" "$headers" >&3
+  else
+    printf "%s %s HTTP/1.1\r\nhost: %s\r\nConnection: close\r\n\r\n" "$method" "$path" "$host" >&3
+  fi
   # Read only first line, timeout after 5s without response
   read -u 3 -t 5 response
   is_regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0

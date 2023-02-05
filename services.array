@@ -1,8 +1,8 @@
 granian=(
-  [system_packages]=py:granian
+  [system_packages]="py:granian"
   [command]="granian --host 0.0.0.0 --port 8080 --interface asgi /bash-init/apps/granian/main:app"
   [restart]="on-failure"
-  [stop_signal]=SIGTERM
+  [stop_signal]="SIGTERM"
   [probe]="http:127.0.0.1:8080:/:GET:200"
   [success_exit]=0
   [python_virtualenv_params]=
@@ -10,57 +10,58 @@ granian=(
   [probe_retries]=5
   [depends]=
   [probe_as_dependency]=0
-  [probe_failure_action]=restart
-  [reload_signal]=SIGHUP
+  [probe_failure_action]="restart"
+  [reload_signal]="SIGHUP"
 )
 
 rspamd=(
-  [system_packages]=rspamd,procps,pstree
+  [system_packages]="rspamd,procps,pstree"
   [command]="rspamd -f --insecure"
   [restart]="on-failure"
-  [stop_signal]=SIGTERM
+  [stop_signal]="SIGTERM"
   [probe]="http:debinux.de:80:/:GET:301"
   [success_exit]=0
   [probe_retries]=5
-  [depends]=
+  [depends]="sleep"
   [probe_as_dependency]=0
-  [probe_failure_action]=reload
-  [reload_signal]=SIGHUP
+  [probe_failure_action]="reload"
+  [reload_signal]="SIGHUP"
 )
 
 sleep=(
-  [system_packages]=procps,pstree
+  [system_packages]="procps,pstree"
   [command]="sleep 6000"
   [restart]="on-failure"
-  [stop_signal]=SIGTERM
-  [probe]="http:1.1.1.1:80:/:GET:301"
+  [stop_signal]="SIGTERM"
+  [probe]="http:debinux.de:80:/:GET:200"
   [probe_retries]=1
-  [depends]=granian
-  [probe_failure_action]=reload
+  [depends]=
+  [probe_failure_action]="reload"
   [probe_as_dependency]=0
-  [probe_interval]=1
+  [probe_interval]=10
 )
 
 stress_ng=(
-  [system_packages]=stress-ng,procps,pstree
+  [system_packages]="stress-ng,procps,pstree"
   [command]="stress-ng --vm 1 --vm-bytes 10M --vm-hang 0"
   [restart]="on-failure"
-  [stop_signal]=SIGTERM
-  [probe]="http:debinux.de:80:/:GET:301"
+  [stop_signal]="SIGTERM"
+  [probe]="http:1.1.1.1:80:/:GET:301"
   [success_exit]=0
   [probe_retries]=3
-  [depends]=sleep
-  [probe_failure_action]=restart
+  [depends]="sleep"
+  [depends_grace_period]=10
+  [probe_failure_action]="restart"
   [reload_signal]=0
   [probe_as_dependency]=0
-  [probe_interval]=1
+  [probe_interval]=10
 )
 
 python=(
-  [system_packages]=py:textual
+  [system_packages]="py:textual"
   [command]="python3 -m http.server 8081"
   [restart]="on-failure"
-  [stop_signal]=SIGTERM
+  [stop_signal]="SIGTERM"
   [probe]="http:127.0.0.1:8080:/:GET:200"
   [success_exit]=0
   [probe_retries]=5
@@ -70,10 +71,10 @@ python=(
 )
 
 oneshot=(
-  [system_packages]=go:github.com/raphaelreyna/oneshot@latest
+  [system_packages]="go:github.com/raphaelreyna/oneshot@latest"
   [command]="oneshot -u"
   [restart]="always"
-  [stop_signal]=SIGTERM
+  [stop_signal]="SIGTERM"
   [probe]="http:127.0.0.1:8080:/:GET:200"
   [probe_retries]=3
   [http_probe_timeout]=3

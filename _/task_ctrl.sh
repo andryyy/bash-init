@@ -8,7 +8,8 @@ start_probe_job() {
   probe_type=$(trim_string "${params[0]}")
   [[ "$probe_type" =~ http|tcp ]] || {
     text info "Service $service_colored has invalid probe type definition: $probe_type"
-    kill -TERM -$$
+    env_ctrl "$service_name" "set" "pending_signal" "stop"
+    return
   }
   trap -- "launched=1" SIGRTMIN
 
@@ -29,23 +30,19 @@ start_probe_job() {
         return 1
       fi
 
-      if ! run_with_timeout $probe_timeout http_probe ${params[@]:1}; then
+      if ! run_with_timeout $probe_timeout http_probe ${params[@]:1} "$http_probe_headers"; then
         ((probe_counter++))
 
         if [ $probe_counter -le $probe_retries ]; then
           text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
-          [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ] && {
+          if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ]; then
             text error "Service $service_colored has a hard-failing HTTP probe"
             env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
-          }
-          env_ctrl "$service_name" "set" "active_probe_status" "0"
+            env_ctrl "$service_name" "set" "active_probe_status" "0"
+          fi
 
-          if [[ "$probe_failure_action" == "terminate" ]]; then
-            >/tmp/bash-init-svc_${service_name}
-            kill -TERM -$$
-
-          elif [[ "$probe_failure_action" == "stop" ]]; then
+          if [[ "$probe_failure_action" == "stop" ]]; then
             env_ctrl "$service_name" "set" "pending_signal" "stop"
             return
 
@@ -61,11 +58,11 @@ start_probe_job() {
         fi
       else
         probe_counter=0
-        [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ] && {
+        if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ]; then
           text success "HTTP probe for service $service_colored succeeded"
           env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
-        }
-        env_ctrl "$service_name" "set" "active_probe_status" "1"
+          env_ctrl "$service_name" "set" "active_probe_status" "1"
+        fi
       fi
       [ $continous_probe -eq 0 ] && break
       delay $probe_interval
@@ -119,6 +116,9 @@ prepare_container() {
   fi
 }
 
+#---------------------------#
+#--------- Stage 3 ---------#
+#---------------------------#
 # Starts probe and runs command
 # Returns command_pid
 run_command() {
@@ -129,7 +129,7 @@ run_command() {
     declare -i probe_status_loop=0
     until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
       ((probe_status_loop++))
-      [ $((probe_status_loop%3)) -eq 0 ] && \
+      [ $((probe_status_loop%5)) -eq 0 ] && \
         text info "$(stage_text stage_3) Service container $service_colored is awaiting healthy probe to run command"
       delay 1
     done
