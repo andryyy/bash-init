@@ -22,13 +22,19 @@ text() {
 }
 
 stage_text() {
-  [ ${#@} -ne 1 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  case "$2" in
+    info) c=45;;
+    success) c=42;;
+    warning) c=43;;
+    error) c=41;;
+  esac
   if [[ "$1" == "stage_1" ]]; then
-    printf "|\e[1;45;97m Sta\e[0;47;30mge 1/3 \e[0m|"
+    printf "|\e[1;%d;97m Sta\e[0;47;30mge 1/3 \e[0m|" "$c"
   elif [[ "$1" == "stage_2" ]]; then
-    printf "|\e[1;45;97m Stage \e[0;47;30m2/3 \e[0m|"
+    printf "|\e[1;%d;97m Stage \e[0;47;30m2/3 \e[0m|" "$c"
   elif [[ "$1" == "stage_3" ]]; then
-    printf "|\e[1;45;97m Stage 3/3 \e[0m|"
+    printf "|\e[1;%d;97m Stage 3/3 \e[0m|" "$c"
   fi
 }
 

@@ -72,7 +72,7 @@ for i in {1..2}; do
         exit 1
       fi
 
-      text info "$(stage_text stage_1) Starting: $(text info $service color_only)"
+      text info "$(stage_text stage_1 info) Starting: $(text info $service color_only)"
       > /tmp/bash-init-svc_${service}
       for config in "${CONFIG_PARAMS[@]}"; do
         user_config=0
@@ -90,7 +90,7 @@ for i in {1..2}; do
       env_file=/tmp/bash-init-svc_${service} bash _/task.sh &
       pid=$!
       BACKGROUND_PIDS[$service]=$pid
-      text success "$(stage_text stage_1) Spawned service container $(text info $service color_only) with PID $pid"
+      text success "$(stage_text stage_1 success) Spawned service container $(text info $service color_only) with PID $pid"
     done
   fi
 done
@@ -100,71 +100,76 @@ done
 #---------------------------#
 declare -i pid
 declare -i stage_2_loop=0
-declare -A health_check_loop
 declare -A started_containers
 declare -A awaiting_dependencies
-declare -a service_dependencies
 while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
   for key in "${!BACKGROUND_PIDS[@]}"; do
     ((stage_2_loop++))
-    mapfile -t service_dependencies < <(. /tmp/bash-init-svc_${key} ; split "$depends" ",")
+    service_dependency="$(env_ctrl "$key" "get" "depends")"
 
-    for service_dependency in ${service_dependencies[@]}; do
+    if [ ! -z $service_dependency ]; then
+
       declare -n "sd=$service_dependency"
+
       if [ ${#sd[@]} -eq 0 ]; then
         text error \
         "Dependency $(text info $service_dependency color_only) of service \
         $(text info $key color_only) is not a defined service"
         exit 1
+
       elif [ "$service_dependency" == "$key" ]; then
         text error "Service $(text info $key color_only) depends on itself"
         exit 1
+
       else
+        if [ $((stage_2_loop%3)) -eq 0 ]; then
+          text info "$(stage_text stage_2 info) \
+            Trying service dependency $(text info $service_dependency color_only) of service $(text info $key color_only)"
+        fi
+
+        awaiting_dependencies[$key]=$service_dependency
+        declare -i depends_grace_period=0
+        depends_grace_period="$(env_ctrl "$key" "get" "depends_grace_period")"
+
+        # Retries exceeded
+        # OR Service is gone
+        # OR Service is about to be terminated
+        if [ $stage_2_loop -gt $depends_grace_period ] || \
+           [ -z "$(env_ctrl "$service_dependency" "get" "service_name")" ] || \
+           [ ! -z "$(env_ctrl "$service_dependency" "get" "pending_signal")" ]; then
+          text error "$(stage_text stage_2 error) Service $(text info $key color_only) will be configured to stop \
+            after initialization due to unhealthy dependency $(text info $service_dependency color_only)"
+          # Remove dependency to stop looping over it
+          env_ctrl "$key" "set" "depends" ""
+          # Tell service container to self-destroy
+          env_ctrl "$key" "set" "pending_signal" "stop"
+          unset health_check_loop[$key]
+          unset awaiting_dependencies[$key]
+          continue
+        fi
+
         if [ ${#started_containers[$service_dependency]} -eq 0 ]; then
           if [ "${awaiting_dependencies[$service_dependency]}" == "$key" ]; then
             text error "FATAL: Dependency loop: Service $(text info $key color_only) depends on \
               $(text info $service_dependency color_only) which depends on $key"
-              exit 1
+            exit 1
           fi
 
-          if [ $((stage_2_loop%5)) -eq 0 ]; then
-            text info "$(stage_text stage_2) \
-              Service $(text info $key color_only) is awaiting service dependency $(text info $service_dependency color_only)"
-              awaiting_dependencies[$key]=$service_dependency
-          fi
-
-          continue 2
         else
           if [ ! -z "$(env_ctrl "$service_dependency" "get" "probe")" ] && \
               [ "$(env_ctrl "$service_dependency" "get" "active_probe_status")" != "1" ]; then
-            declare -i depends_grace_period=0
-            depends_grace_period="$(env_ctrl "$key" "get" "depends_grace_period")"
 
-            if [ ! -v health_check_loop[$key] ]; then
-              health_check_loop[$key]=1
-            else
-              ((health_check_loop[$key]++))
-            fi
-
-            if [ ${health_check_loop[$key]} -gt $depends_grace_period ]; then
-              text error "$(stage_text stage_2) Service $(text info $key color_only) will be configured to stop \
-                after initialization due to unhealthy dependency $(text info $service_dependency color_only)"
-              # Remove dependency to stop looping over it
-              env_ctrl "$key" "set" "depends" ""
-              # Tell service container to self-destroy
-              env_ctrl "$key" "set" "pending_signal" "stop"
-              unset health_check_loop[$key]
-            elif [ $((health_check_loop[$key] % 3)) -eq 0 ]; then
-              text info "$(stage_text stage_2) Service $(text info $key color_only) is awaiting \
+            if [ $((health_check_loop[$key]%3)) -eq 0 ]; then
+              text info "$(stage_text stage_2 info) Service $(text info $key color_only) is awaiting \
                 healthy state of service dependency $(text info $service_dependency color_only), delaying"
             fi
 
-            delay 1
-            continue 2
+          else
+            unset awaiting_dependencies[$key]
           fi
         fi
       fi
-    done
+    fi
 
     #---------------------------#
     #-------- Stage 2.5 --------#
@@ -172,19 +177,19 @@ while [ ${#started_containers[@]} -ne ${#BACKGROUND_PIDS[@]} ]; do
     # This condition check will only be tried when dependencies were met
     # bash-init does now CONT the prepared service containers in stage 2
     # Stage 3 will ultimately be triggered by run_command() which also fires the probe inside the service container
-    if [ ${#started_containers[$key]} -eq 0 ]; then
+    if [ ! -v awaiting_dependencies[$key] ] && [ ${#started_containers[$key]} -eq 0 ]; then
       pid=${BACKGROUND_PIDS[$key]}
       if await_stop $pid; then
         started_containers[$key]=1
         kill -CONT $pid
-        text success "$(stage_text stage_2) Service container $(text info $key color_only) was initialized"
+        [[ -z "$(env_ctrl "$key" "get" "pending_signal")" ]] && text success "$(stage_text stage_2 success) Service container $(text info $key color_only) was initialized"
       else
-        text error "$(stage_text stage_2) FATAL: Service container $(text info $key color_only) could not be initialized"
+        text error "$(stage_text stage_2 error) FATAL: Service container $(text info $key color_only) could not be initialized"
         exit 1
       fi
-
     fi
   done
+  delay 1
 done
 
 declare -i run_loop=0
@@ -220,7 +225,7 @@ while true; do
           kill -CONT $_pid
           text success "Service container $(text info $key color_only) was re-initialized"
         else
-          text error "$(stage_text stage_2) Service container $(text info $key color_only) could not be \
+          text error "$(stage_text stage_2 error) Service container $(text info $key color_only) could not be \
             re-initialized and will be removed"
           >/tmp/bash-init-svc_${key}
         fi

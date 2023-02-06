@@ -249,7 +249,7 @@ http_probe() {
   # Read only first line, timeout after 5s without response
   read -u 3 -t 5 response
   is_regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
-  text debug "Unexpected response by probe $(join_array ":" "${@}") - $(text info "$response" color_only)"
+  [ -v debug ] && text debug "Unexpected response by probe $(join_array ":" "${@}") - $(text info "$response" color_only)"
   return 1
 }
 

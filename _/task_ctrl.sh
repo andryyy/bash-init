@@ -152,8 +152,8 @@ run_command() {
     declare -i probe_status_loop=0
     until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
       ((probe_status_loop++))
-      [ $((probe_status_loop%5)) -eq 0 ] && \
-        text info "$(stage_text stage_3) Service container $service_colored is awaiting healthy probe to run command"
+      [ $((probe_status_loop%3)) -eq 0 ] && \
+        text warning "$(stage_text stage_3 warning) Service container $service_colored is awaiting healthy probe to run command"
       delay 1
     done
     local start_probe=0
@@ -169,5 +169,5 @@ run_command() {
 
   [ -v probe_pid ] && [ $start_probe -eq 1 ] && kill -SIGRTMIN $probe_pid
   env_ctrl "$service_name" "set" "command_pid" "$command_pid"
-  text success "$(stage_text stage_3) Service container $service_colored ($$) started command with PID $command_pid"
+  text success "$(stage_text stage_3 success) Service container $service_colored ($$) started command with PID $command_pid"
 }
