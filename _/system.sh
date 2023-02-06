@@ -66,13 +66,17 @@ emit_service_stats() {
     || memory_usage=0
 
   pid_childs=$(collect_childs $pid)
-  for child in ${pid_childs[@]}; do
-    2>/dev/null mapfile -n 2 -t rss <"/proc/${child}/smaps_rollup" || continue
+  pid_childs+=($pid)
 
+  for child in ${pid_childs[@]}; do
+    if [[ "$(proc_runas $child)" != "0:0" ]]; then
+      2>/dev/null $runas_helper $(proc_runas $child) mapfile -n 2 -t rss <"/proc/${child}/smaps_rollup"
+    else
+      2>/dev/null mapfile -n 2 -t rss <"/proc/${child}/smaps_rollup" || continue
+    fi
     is_regex_match "${rss[1]}" "([0-9]+)" \
       && memory_usage=$(( $memory_usage + "${BASH_REMATCH[1]}" )) \
       || continue
-
     2>/dev/null read -r comm <"/proc/${child}/comm" || continue
     [[ "$comm" == "bash" ]] && [ $emit_stats_hide_bash -eq 1 ] && continue
     if [ $emit_stats_proc_names -eq 1 ]; then
@@ -258,6 +262,22 @@ proc_status() {
     print_regex_match "$line" "$(printf '%s:\s(.*)$' $attr)"
   done
 }
+
+proc_runas() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0)" >&2
+  if ! is_regex_match "$1" "^[0-9]+$"; then
+    text error "${FUNCNAME[0]}: Invalid arguments"
+    return 1
+  fi
+
+  declare -i pid=$1
+  declare -a uid_id
+  2>/dev/null mapfile -t proc_status </proc/${pid}/task/${pid}/status
+  s=$(trim_all "${proc_status[@]}")
+  uid_id=($(print_all_regex_matches "$s" "$(printf 'Uid:\s([0-9]+).*Gid:\s([0-9]+)')"))
+  printf "%s:%s" "${uid_id[0]}" "${uid_id[1]}"
+}
+
 
 # Get current or previous value of one or more env vars of a service
 #   - env_ctrl get var_name [var_name2 var_name3 ...]

@@ -92,3 +92,10 @@ delay() (
 print_regex_match() {
   [[ $1 =~ $2 ]] && printf '%s\n' "${BASH_REMATCH[1]}" || return 0
 }
+
+print_all_regex_matches() {
+  [[ $1 =~ $2 ]]
+  for match in "${BASH_REMATCH[@]:1}"; do
+    printf '%s\n' $match
+  done
+}

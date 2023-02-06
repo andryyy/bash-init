@@ -74,11 +74,33 @@ prepare_container() {
   [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
     with args $(join_array " " "${@}")"
   mapfile -t packages < <(. /tmp/bash-init-svc_${service_name} && split "$system_packages" ",")
-  is_regex_match "$package_manager_lock_wait" "^[0-9]+$" || package_manager_lock_wait=600
+
+  if [ ! -z "$runas" ]; then
+    mapfile -t runas_test < <(split "$runas" ":")
+    if [ ${#runas_test[@]} -ne 2 ]; then
+      text error "Service $service_colored has an invalid runas specification"
+      exit 1
+    fi
+
+    for k in ${runas_test[@]}; do
+      if ! is_regex_match "$k" "^[0-9]+$"; then
+        text error "Service $service_colored has an invalid runas specification"
+        exit 1
+      fi
+    done
+
+    [ -v debian ] && { packages+=("gosu"); }
+    [ -v alpine ] && { packages+=("su-exec"); }
+  fi
+
   declare -i go=0 py=0
   declare -a py_pkgs go_pkgs
 
   if [ ! -z "${packages}" ]; then
+    if [ -v debian ]; then
+      apt update
+    fi
+
     for pkg in ${packages[@]}; do
       mapfile -t types < <(split "$pkg" ":")
       # Pathes may contain :, so ge 2 is fine
@@ -89,12 +111,12 @@ prepare_container() {
       }
     done
 
-    text info "Installing additional system packages for service ${service_colored}"
-    if command -v apk >/dev/null; then
+    text info "Installing additional system packages for service $service_colored"
+    if [ -v alpine ]; then
       [ $go -eq 1 ] && packages+=("go")
       [ $py -eq 1 ] && packages+=("python3" "py3-pip" "py3-virtualenv")
       apk --wait $package_manager_lock_wait add $(trim_all "${packages[@]}")
-    elif command -v apt >/dev/null; then
+    elif [ -v debian ]; then
       [ $go -eq 1 ] && packages+=("golang")
       [ $py -eq 1 ] && packages+=("python3" "python3-pip" "python3-virtualenv")
       apt -o DPkg::Lock::Timeout=$package_manager_lock_wait install $(trim_all "${packages[@]}")
@@ -123,7 +145,8 @@ prepare_container() {
 # Returns command_pid
 run_command() {
   # Allow for last-minute command changes
-  command=$(env_ctrl "$service_name" "get" "command")
+  local command=$(env_ctrl "$service_name" "get" "command")
+
   if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
     kill -SIGRTMIN $probe_pid
     declare -i probe_status_loop=0
@@ -133,14 +156,18 @@ run_command() {
         text info "$(stage_text stage_3) Service container $service_colored is awaiting healthy probe to run command"
       delay 1
     done
-    $command & command_pid=$!
+    local start_probe=0
+  else
+    local start_probe=1
+  fi
+
+  if [ ! -z "$runas" ]; then
+    $runas_helper $runas $command & command_pid=$!
   else
     $command & command_pid=$!
-    [ -v probe_pid ] && {
-      kill -SIGRTMIN $probe_pid
-    }
   fi
-  env_ctrl "$service_name" "set" "command_pid" "$command_pid"
 
+  [ -v probe_pid ] && [ $start_probe -eq 1 ] && kill -SIGRTMIN $probe_pid
+  env_ctrl "$service_name" "set" "command_pid" "$command_pid"
   text success "$(stage_text stage_3) Service container $service_colored ($$) started command with PID $command_pid"
 }

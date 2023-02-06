@@ -28,7 +28,6 @@ Documentation soon. Really. I'm serious.
 **Todo**
 
 - Documentation
-- Specify UID/GID (auto-setup of users if missing)
 - Isolation (will most likely require non-bash dependencies)
   - Chroot/Container/Cgroups
 - Restricted bash for service commands
