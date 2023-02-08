@@ -3,7 +3,7 @@ text() {
   local c
   local s
   local t
-  case "${1}" in
+  case "$1" in
     info) s=INFO; c=96;;
     success) s=SUCCESS; c=32;;
     warning) s=WARN; c=93;;
@@ -21,21 +21,39 @@ text() {
   }
 }
 
-stage_text() {
+stage() {
   [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
-  case "$2" in
-    info) c=45;;
+  fc=97
+  case "$1" in
+    info) c=46;;
     success) c=42;;
-    warning) c=43;;
+    warning) c=103; fc=30;;
     error) c=41;;
   esac
-  if [[ "$1" == "stage_1" ]]; then
-    printf "|\e[1;%d;97m Sta\e[0;47;30mge 1/3 \e[0m|" "$c"
-  elif [[ "$1" == "stage_2" ]]; then
-    printf "|\e[1;%d;97m Stage \e[0;47;30m2/3 \e[0m|" "$c"
-  elif [[ "$1" == "stage_3" ]]; then
-    printf "|\e[1;%d;97m Stage 3/3 \e[0m|" "$c"
-  fi
+  shift
+  case "$1" in
+    1) printf "|\e[1;%d;%dm Sta\e[0;47;30mge 1/3 \e[0m|" "$c" "$fc";;
+    2) printf "|\e[1;%d;%dm Stage \e[0;47;30m2/3 \e[0m|" "$c" "$fc";;
+    3) printf "|\e[1;%d;%dm Stage 3/3 \e[0m|" "$c" "$fc";;
+  esac
+}
+
+probe_text() {
+  [ ${#@} -ne 1 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  fc=97
+  case "$1" in
+    info) c=46;;
+    success) c=42;;
+    warning) c=103; fc=30;;
+    error) c=41;;
+  esac
+  printf "|\e[1;%d;%dm Probe \e[0m|" "$c" "$fc"
+  case "$1" in
+    1) c=46;;
+    2) c=42;;
+    3) c=103; fc=30;;
+    error) c=41;;
+  esac
 }
 
 join_array() {

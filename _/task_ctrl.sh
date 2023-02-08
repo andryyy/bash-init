@@ -22,7 +22,7 @@ start_probe_job() {
 
   declare -i probe_counter=0
   if [[ $probe_type == "http" ]]; then
-    text info "Service $service_colored probe (http) is now being tried"
+    text info "$(probe_text info) Service $service_colored probe (http) is now being tried"
     env_ctrl "$service_name" "set" "probe_type" "http"
     while true; do
 
@@ -34,10 +34,10 @@ start_probe_job() {
         ((probe_counter++))
 
         if [ $probe_counter -le $probe_retries ]; then
-          text warning "Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
+          text warning "$(probe_text warning) Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
         else
           if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ]; then
-            text error "Service $service_colored has a hard-failing HTTP probe"
+            text error "$(probe_text error) Service $service_colored has a hard-failing HTTP probe"
             env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
             env_ctrl "$service_name" "set" "active_probe_status" "0"
           fi
@@ -59,7 +59,7 @@ start_probe_job() {
       else
         probe_counter=0
         if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ]; then
-          text success "HTTP probe for service $service_colored succeeded"
+          text success "$(probe_text success) HTTP probe for service $service_colored succeeded"
           env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
           env_ctrl "$service_name" "set" "active_probe_status" "1"
         fi
@@ -78,13 +78,13 @@ prepare_container() {
   if [ ! -z "$runas" ]; then
     mapfile -t runas_test < <(split "$runas" ":")
     if [ ${#runas_test[@]} -ne 2 ]; then
-      text error "Service $service_colored has an invalid runas specification"
+      text error "$(stage error 2) Service $service_colored has an invalid runas specification"
       exit 1
     fi
 
     for k in ${runas_test[@]}; do
       if ! is_regex_match "$k" "^[0-9]+$"; then
-        text error "Service $service_colored has an invalid runas specification"
+        text error "$(stage error 2) Service $service_colored has an invalid runas specification"
         exit 1
       fi
     done
@@ -111,7 +111,7 @@ prepare_container() {
       }
     done
 
-    text info "Installing additional system packages for service $service_colored"
+    text info "$(stage info 2) Installing additional system packages for service $service_colored"
     if [ -v alpine ]; then
       [ $go -eq 1 ] && packages+=("go")
       [ $py -eq 1 ] && packages+=("python3" "py3-pip" "py3-virtualenv")
@@ -121,7 +121,7 @@ prepare_container() {
       [ $py -eq 1 ] && packages+=("python3" "python3-pip" "python3-virtualenv")
       apt -o DPkg::Lock::Timeout=$package_manager_lock_wait install $(trim_all "${packages[@]}")
     else
-      text error "No supported package manager to install additional system packages"
+      text error "$(stage error 2) No supported package manager to install additional system packages"
       return 1
     fi
 
@@ -153,7 +153,7 @@ run_command() {
     until [ "$(env_ctrl "$service_name" "get" "active_probe_status")" == "1" ]; do
       ((probe_status_loop++))
       [ $((probe_status_loop%3)) -eq 0 ] && \
-        text warning "$(stage_text stage_3 warning) Service container $service_colored is awaiting healthy probe to run command"
+        text warning "$(stage warning 3) Service container $service_colored is awaiting healthy probe to run command"
       delay 1
     done
     local start_probe=0
@@ -169,5 +169,5 @@ run_command() {
 
   [ -v probe_pid ] && [ $start_probe -eq 1 ] && kill -SIGRTMIN $probe_pid
   env_ctrl "$service_name" "set" "command_pid" "$command_pid"
-  text success "$(stage_text stage_3 success) Service container $service_colored ($$) started command with PID $command_pid"
+  text success "$(stage success 3) Service container $service_colored ($$) started command with PID $command_pid"
 }
