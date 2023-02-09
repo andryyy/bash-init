@@ -8,7 +8,7 @@ declare -A BACKGROUND_PIDS
 for parameter in ${@}; do
   shift
   if [[ "$parameter" =~ (-d|--debug) ]]; then
-    debug=1
+    export debug=1
   else
     set -- "$@" "$parameter"
   fi

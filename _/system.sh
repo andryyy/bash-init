@@ -66,7 +66,6 @@ emit_service_stats() {
     || memory_usage=0
 
   pid_childs=$(collect_childs $pid)
-  pid_childs+=($pid)
 
   for child in ${pid_childs[@]}; do
     if [[ "$(proc_runas $child)" != "0:0" ]]; then
@@ -205,25 +204,34 @@ proc_exists() {
   kill -0 $1 2>/dev/null
 }
 
+# Also includes threads
 collect_childs() {
   [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
     with args $(join_array " " "${@}")" >&2
   declare -i pid
   pid=$1
   [ $pid -eq 0 ] && return 1
-  2>/dev/null mapfile -d ' ' childs <"/proc/$pid/task/$pid/children"
-  for child in ${childs[@]}; do
-    printf "%s\n" $child
-    collect_childs $child;
+  for tasks in /proc/$pid/task/*; do
+    task_array=($(split "$tasks" "/"))
+    task_id=${task_array[3]}
+    [[ $pid != $task_id ]] && printf "%s\n" $task_id
+    2>/dev/null mapfile -d ' ' childs <"/proc/$pid/task/$task_id/children"
+    for child in ${childs[@]}; do
+      [[ $child == $task_id ]] && continue
+      [[ $child == $pid ]] && continue
+      printf "%s\n" $child
+      collect_childs $child;
+    done
   done
 }
 
+# http_probe hostname port path method expected_status_code extra_headers
+# Example: http_probe www.example.com 80 "/" GET 200 ""
+# Should be called with run_with_timeout to avoid long waits
+# Waits 5s for a response (not connect), else return 1
 http_probe() {
   [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
     with args $(join_array " " "${@}")" >&2
-  # http_probe hostname port path method expected_status_code
-  # Example: http_probe www.example.com 80 "/" GET 200
-  # Should be called with run_with_timeout to avoid long waits
   [ ${#@} -ne 6 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
   local host
   local status_code
@@ -250,6 +258,33 @@ http_probe() {
   read -u 3 -t 5 response
   is_regex_match "$response" "$(printf "HTTP/1.[0-1] %s" "$status_code")" && return 0
   [ -v debug ] && text debug "Unexpected response by probe $(join_array ":" "${@}") - $(text info "$response" color_only)"
+  return 1
+}
+
+# tcp_probe hostname port send expect_regex_first_line
+# Example: tcp_probe localhost 6379 "PING\n" "PONG"
+# Should be called with run_with_timeout to avoid long waits
+# Only the first line of the response is evaluated
+# Waits 5s for a response (not connect), else return 1
+tcp_probe() {
+  [ -v debug ] && text debug "Function ${FUNCNAME[0]} called by $(caller 0) \
+    with args $(join_array " " "${@}")" >&2
+  [ ${#@} -ne 4 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
+  local host
+  declare -i port
+  declare -a response
+  local send
+  local expect
+  host=$(trim_string "$1")
+  port="$2"
+  send=$(trim_string "$3")
+  expect=$(trim_string "$4")
+  2>/dev/null exec 3<>/dev/tcp/${host}/${port} || return 1
+  printf "%b" "$send" >&3
+  # Timeout after 5s without response
+  read -t 5 -u 3 response
+  is_regex_match "$(trim_string "$response")" "$expect" && return 0
+  [ -v debug ] && text debug "Unexpected response by probe $(join_array ":" "${@}") - $(text info "$(trim_string "$response")" color_only)"
   return 1
 }
 

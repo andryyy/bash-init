@@ -14,15 +14,14 @@ granian=(
   [reload_signal]="SIGHUP"
 )
 
-rspamd=(
-  [system_packages]="rspamd,procps,pstree"
-  [command]="rspamd -f --insecure"
+redis=(
+  [system_packages]="redis"
+  [command]="redis-server"
   [restart]="on-failure"
   [stop_signal]="SIGTERM"
   [probe]="http:debinux.de:80:/:GET:301"
   [success_exit]=0
   [probe_retries]=5
-  [depends]="stress_ng"
   [probe_as_dependency]=0
   [probe_failure_action]="reload"
   [reload_signal]="SIGHUP"
@@ -34,13 +33,13 @@ sleep=(
   [restart]="on-failure"
   [stop_signal]="SIGTERM"
   [runas]="1000:1000"
-  [probe]="http:debinux.de:80:/:GET:301"
-  [probe_retries]=1
-  [depends]=
+  [probe]='tcp:localhost:6379:PING\n:\+PONG\$'
+  [probe_retries]=1000
+  [depends]="redis"
   [probe_failure_action]="reload"
   [reload_signal]=0
   [probe_as_dependency]=0
-  [probe_interval]=10
+  [probe_interval]=1
 )
 
 stress_ng=(

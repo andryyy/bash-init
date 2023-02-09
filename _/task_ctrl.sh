@@ -6,68 +6,75 @@ start_probe_job() {
     with args $(join_array " " "${@}")"
   mapfile -t params < <(split "$probe" ":")
   probe_type=$(trim_string "${params[0]}")
-  [[ "$probe_type" =~ http|tcp ]] || {
+  if ! [[ "${probe_type,,}" =~ http|tcp ]]; then
     text info "Service $service_colored has invalid probe type definition: $probe_type"
     env_ctrl "$service_name" "set" "pending_signal" "stop"
     return
-  }
+  fi
+
   trap -- "launched=1" SIGRTMIN
 
   env_ctrl "$service_name" "set" "active_probe_status" "2"
   env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
+  env_ctrl "$service_name" "set" "probe_type" "$probe_type"
 
   until [ -v launched ]; do
     delay 1
   done
 
   declare -i probe_counter=0
-  if [[ $probe_type == "http" ]]; then
-    text info "$(probe_text info) Service $service_colored probe (http) is now being tried"
-    env_ctrl "$service_name" "set" "probe_type" "http"
-    while true; do
+  text info "$(probe_text info) Service $service_colored probe (${probe_type^^}) is now being tried"
 
-      if [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; then
-        return 1
-      fi
+  while true; do
+    if [ ! -z "$(env_ctrl "$service_name" "get" "pending_signal")" ]; then
+      return 1
+    fi
 
-      if ! run_with_timeout $probe_timeout http_probe ${params[@]:1} "$http_probe_headers"; then
-        ((probe_counter++))
+    if [[ "${probe_type,,}" == "http" ]]; then
+      run_with_timeout $probe_timeout ${probe_type,,}_probe ${params[@]:1} "$http_probe_headers"
+      ec=$?
+    elif [[ "${probe_type,,}" == "tcp" ]]; then
+      run_with_timeout $probe_timeout ${probe_type,,}_probe ${params[@]:1}
+      ec=$?
+    fi
 
-        if [ $probe_counter -le $probe_retries ]; then
-          text warning "$(probe_text warning) Service $service_colored has a soft-failing HTTP probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
-        else
-          if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ]; then
-            text error "$(probe_text error) Service $service_colored has a hard-failing HTTP probe"
-            env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
-            env_ctrl "$service_name" "set" "active_probe_status" "0"
-          fi
+    if [ $ec -ne 0 ]; then
+      ((probe_counter++))
 
-          if [[ "$probe_failure_action" == "stop" ]]; then
-            env_ctrl "$service_name" "set" "pending_signal" "stop"
-            return
-
-          elif [[ "$probe_failure_action" == "reload" ]]; then
-            env_ctrl "$service_name" "set" "pending_signal" "reload"
-            env_ctrl "$service_name" "set" "active_probe_status" "2"
-            probe_counter=0
-
-          elif [[ "$probe_failure_action" == "restart" ]]; then
-            env_ctrl "$service_name" "set" "pending_signal" "restart"
-            return
-          fi
-        fi
+      if [ $probe_counter -le $probe_retries ]; then
+        text warning "$(probe_text warning) Service $service_colored has a soft-failing ${probe_type^^} probe [probe_retries=$((probe_counter-1))/${probe_retries}]"
       else
-        probe_counter=0
-        if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ]; then
-          text success "$(probe_text success) HTTP probe for service $service_colored succeeded"
+        if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "0" ]; then
+          text error "$(probe_text error) Service $service_colored has a hard-failing ${probe_type^^} probe"
           env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
-          env_ctrl "$service_name" "set" "active_probe_status" "1"
+          env_ctrl "$service_name" "set" "active_probe_status" "0"
+        fi
+
+        if [[ "$probe_failure_action" == "stop" ]]; then
+          env_ctrl "$service_name" "set" "pending_signal" "stop"
+          return
+
+        elif [[ "$probe_failure_action" == "reload" ]]; then
+          env_ctrl "$service_name" "set" "pending_signal" "reload"
+          env_ctrl "$service_name" "set" "active_probe_status" "2"
+          probe_counter=0
+
+        elif [[ "$probe_failure_action" == "restart" ]]; then
+          env_ctrl "$service_name" "set" "pending_signal" "restart"
+          return
         fi
       fi
-      [ $continous_probe -eq 0 ] && break
-      delay $probe_interval
-    done
-  fi
+    else
+      probe_counter=0
+      if [ "$(env_ctrl "$service_name" "get" "active_probe_status")" != "1" ]; then
+        text success "$(probe_text success) ${probe_type^^} probe for service $service_colored succeeded"
+        env_ctrl "$service_name" "set" "active_probe_status_change" "$(printf "%(%s)T")"
+        env_ctrl "$service_name" "set" "active_probe_status" "1"
+      fi
+    fi
+    [ $continous_probe -eq 0 ] && break
+    delay $probe_interval
+  done
 }
 
 prepare_container() {
