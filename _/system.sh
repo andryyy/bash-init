@@ -66,6 +66,7 @@ emit_service_stats() {
     || memory_usage=0
 
   pid_childs=$(collect_childs $pid)
+  pid_childs+=($pid)
 
   for child in ${pid_childs[@]}; do
     if [[ "$(proc_runas $child)" != "0:0" ]]; then
