@@ -35,7 +35,6 @@ Documentation soon. Really. I'm serious.
 - CPU usage
   - Read CPU ticks in a fixed time frame and put it in reference to CONFIG_HZ
 - Write tests
-- Implement send/expect TCP probes
 - Write notifiers
 - Do not use "text" in functions but use general lang files according to return codes
   - funcname[$return_code]="string"
