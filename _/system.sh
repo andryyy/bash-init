@@ -129,6 +129,7 @@ stop_service() {
   declare -i await_exit
   declare -i pid
   declare -a pid_childs
+  declare -a pid_child_return
   declare -i pid=${BACKGROUND_PIDS[$service]}
 
   [ ${#@} -ne 2 ] && { text error "${FUNCNAME[0]}: Invalid arguments"; return 1; }
@@ -178,13 +179,14 @@ stop_service() {
       done
     done
     for child in ${pid_childs[@]}; do
-      proc_exists $child && {
-        text warning "Child process $child from service container $(text info $service color_only) ($pid) did not exit, terminating"
+      if proc_exists $child; then
+        text warning "Child process $child of service container $(text info $service color_only) ($pid) did not exit, killing"
         kill -9 $child
-      } || {
-        text success "Child process $child from service container $(text info $service color_only) is gone"
-      }
+      else
+        pid_child_return+=($child)
+      fi
     done
+    text success "Zombie checked PID $(join_array "," ${pid_child_return}) of service container $(text info $service color_only)"
   done
 
   [[ "$policy" != "reload" ]] && proc_exists $pid && {

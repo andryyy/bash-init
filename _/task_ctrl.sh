@@ -118,30 +118,35 @@ prepare_container() {
       }
     done
 
+    [ -v debug ] && exec 3>&1 || exec 3>/dev/null
     text info "$(stage info 2) Installing additional system packages for service $service_colored"
     if [ -v alpine ]; then
       [ $go -eq 1 ] && packages+=("go")
       [ $py -eq 1 ] && packages+=("python3" "py3-pip" "py3-virtualenv")
-      apk --wait $package_manager_lock_wait add $(trim_all "${packages[@]}")
+      apk --wait $package_manager_lock_wait add $(trim_all "${packages[@]}") >&3
     elif [ -v debian ]; then
       [ $go -eq 1 ] && packages+=("golang")
       [ $py -eq 1 ] && packages+=("python3" "python3-pip" "python3-virtualenv")
-      apt -o DPkg::Lock::Timeout=$package_manager_lock_wait install $(trim_all "${packages[@]}")
+      apt -o DPkg::Lock::Timeout=$package_manager_lock_wait install $(trim_all "${packages[@]}") >&3
     else
       text error "$(stage error 2) No supported package manager to install additional system packages"
       return 1
     fi
 
     for go_pkg in ${go_pkgs[@]}; do
-      go install $go_pkg
+      text info "$(stage info 2) Installing go package $go_pkg for service container $service_colored"
+      go install $go_pkg >&3
     done
 
     if [ $py -eq 1 ]; then
-      virtualenv ${python_virtualenv_clear} /virtualenvs/${service_name}
-      source /virtualenvs/${service_name}/bin/activate
-      pip3 install --upgrade pip
-      pip3 install --upgrade $(trim_all "${py_pkgs[@]}")
+      text info "$(stage info 2) Setting up Python environment for packages $(trim_all "${py_pkgs[@]}") in service container $service_colored"
+      virtualenv ${python_virtualenv_clear} /virtualenvs/${service_name} >&3
+      source /virtualenvs/${service_name}/bin/activate >&3
+      pip3 install --upgrade pip >&3
+      pip3 install --upgrade $(trim_all "${py_pkgs[@]}") >&3
     fi
+
+    exec 3>&-
   fi
 }
 
