@@ -53,12 +53,10 @@ start_probe_job() {
         if [[ "$probe_failure_action" == "stop" ]]; then
           env_ctrl "$service_name" "set" "pending_signal" "stop"
           return
-
         elif [[ "$probe_failure_action" == "reload" ]]; then
           env_ctrl "$service_name" "set" "pending_signal" "reload"
           env_ctrl "$service_name" "set" "active_probe_status" "2"
           probe_counter=0
-
         elif [[ "$probe_failure_action" == "restart" ]]; then
           env_ctrl "$service_name" "set" "pending_signal" "restart"
           return
@@ -140,10 +138,15 @@ prepare_container() {
 
     if [ $py -eq 1 ]; then
       text info "$(stage info 2) Setting up Python environment for packages $(trim_all "${py_pkgs[@]}") in service container $service_colored"
+
       virtualenv ${python_virtualenv_clear} /virtualenvs/${service_name} >&3
       source /virtualenvs/${service_name}/bin/activate >&3
       pip3 install --upgrade pip >&3
       pip3 install --upgrade $(trim_all "${py_pkgs[@]}") >&3
+
+      if [ ! -z "$runas" ]; then
+        chown -R $runas /virtualenvs/${service_name}
+      fi
     fi
 
     exec 3>&-
@@ -158,6 +161,20 @@ prepare_container() {
 run_command() {
   # Allow for last-minute command changes
   local command=$(env_ctrl "$service_name" "get" "command")
+
+  # Add prefix to service stdout and stderr by using a named pipe
+  prefix() {
+    s=$1
+    shift
+    local line
+    while read line; do
+      printf '%(%c)T ' -1
+      printf "\e[1m%8s\e[0m [service=%s] >> %s\n" "$s" "$service_name" "$line"
+    done
+  }
+
+  exec {fd1}> >(prefix STDOUT)
+  exec {fd2}> >(prefix STDERR)
 
   if [ -v probe_pid ] && [ $probe_as_dependency -eq 1 ]; then
     kill -SIGRTMIN $probe_pid
@@ -174,9 +191,9 @@ run_command() {
   fi
 
   if [ ! -z "$runas" ]; then
-    $runas_helper $runas $command & command_pid=$!
+    $runas_helper $runas $command 1>&$fd1 2>&$fd2 & command_pid=$!
   else
-    $command & command_pid=$!
+    $command 1>&$fd1 2>&$fd2 & command_pid=$!
   fi
 
   [ -v probe_pid ] && [ $start_probe -eq 1 ] && kill -SIGRTMIN $probe_pid

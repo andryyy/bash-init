@@ -88,7 +88,7 @@ emit_service_stats() {
   done
 
   read -d '\n' -r probe_type health health_change \
-    <<<"$(env_ctrl sleep get probe_type active_probe_status active_probe_status_change)"
+    <<<"$(env_ctrl $service get probe_type active_probe_status active_probe_status_change)"
 
   [ -z "$health" ] && health="$(text info "NA" color_only)"
 
@@ -186,7 +186,7 @@ stop_service() {
         pid_child_return+=($child)
       fi
     done
-    text success "Zombie checked PID $(join_array "," ${pid_child_return}) of service container $(text info $service color_only)"
+    text success "PIDs $(join_array ", " ${pid_child_return[@]}) of service container $(text info $service color_only) vanished"
   done
 
   [[ "$policy" != "reload" ]] && proc_exists $pid && {

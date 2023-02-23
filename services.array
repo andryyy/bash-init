@@ -9,6 +9,7 @@ granian=(
   [probe_interval]=15
   [probe_retries]=5
   [depends]=
+  [runas]="1000:1000"
   [probe_as_dependency]=0
   [probe_failure_action]="restart"
   [reload_signal]="SIGHUP"
@@ -29,17 +30,11 @@ redis=(
 
 sleep=(
   [system_packages]="procps,pstree"
-  [command]="sleep 6000"
-  [restart]="on-failure"
+  [command]="sleep"
+  [restart]="never"
   [stop_signal]="SIGTERM"
   [runas]="1000:1000"
-  [probe]='tcp:localhost:6379:PING\n:\+PONG\$'
-  [probe_retries]=1000
-  [depends]="redis"
-  [probe_failure_action]="reload"
   [reload_signal]=0
-  [probe_as_dependency]=0
-  [probe_interval]=1
 )
 
 stress_ng=(
