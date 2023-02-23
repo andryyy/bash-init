@@ -14,14 +14,19 @@ No coreutils, just bash.
 - Dependencies
 - Periodic commands
 - Auto-installation of system packages (Alpine, Debian)
-  - Auto-setup of Python virtual envs if package name is "py:name"
+  - Auto-setup of Python virtualenvs if package name is "py:name"
   - Auto-installation of Go packages when package name is "go:name"
-- Health checks (HTTP probes)
+- Health checks (HTTP and TCP probes)
 - Restart policies
 - Service container stats
 - Custom reload signals (properly sent to command PID only)
 - Custom stop signals (sent to a service containers process group)
+- Run service as uid:gid
+- Prepend stdout/stderr of each service for a better overview
 - No zombies 🧟‍♂️
+
+Running a service with a predefined uid/gid will auto-install su-exec resp. gosu.
+For Python services bash-init requires "chown" to set proper permissions in the virtualenv.
 
 Documentation soon. Really. I'm serious.
 
