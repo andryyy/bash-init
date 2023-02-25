@@ -32,11 +32,15 @@ if [ $# -eq 0 ]; then
 fi
 
 if command -v apk >/dev/null; then
+  text info "Found apk, assuming an Alpine environment"
   export alpine=1
   export runas_helper="su-exec"
 elif command -v apt >/dev/null; then
+  text info "Found apt, assuming a Debian environment"
   export debian=1
   export runas_helper="gosu"
+else
+  text info "Found neither apt nor apk, unknown environment"
 fi
 
 text info "Spawned bash-init with PID $$"
