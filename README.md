@@ -72,5 +72,5 @@ When run containerized, [the official Bash image](https://hub.docker.com/_/bash)
 
 ### Bash requirement
 
-Your base system should provide a bash in version >=5.
+Your base system should provide a Bash in version >=5.
 
